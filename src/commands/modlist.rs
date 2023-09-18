@@ -51,9 +51,14 @@ pub fn list_mods(archive_dir: &str) -> Result<()> {
 
     for manifest in mod_list {
         if manifest.mod_state().is_enabled() {
-            println!("\t[{}] {}", manifest.priority(), manifest.name());
+            println!(
+                "\t[{}] {} ({})",
+                manifest.priority(),
+                manifest.name(),
+                manifest.mod_type()
+            );
         } else {
-            println!("\t[Disabled] {}", manifest.name());
+            println!("\t[Disabled] {} ({})", manifest.name(), manifest.mod_type());
         }
     }
 

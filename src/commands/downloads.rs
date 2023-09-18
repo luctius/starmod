@@ -1,12 +1,13 @@
 use std::{
     ffi::OsString,
     fs::{self, metadata},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use crate::{decompress::SupportedArchives, manifest::Manifest};
 
 use anyhow::Result;
+use walkdir::WalkDir;
 
 fn downloaded_files(download_dir: &str) -> Vec<(SupportedArchives, OsString)> {
     let mut supported_files = Vec::new();
@@ -45,7 +46,7 @@ pub fn extract_downloaded_files(download_dir: &str, archive_dir: &str) -> Result
         let mut archive = PathBuf::from(archive_dir);
 
         //destination:
-        //Force utf-8 complatible strings here to simplify futher code.
+        //Force utf-8 compatible strings, in lower-case, here to simplify futher code.
         let f = f.clone();
         let f = OsString::from(
             f.to_string_lossy()
@@ -62,16 +63,57 @@ pub fn extract_downloaded_files(download_dir: &str, archive_dir: &str) -> Result
                 .unwrap_or(false)
         {
             // Archive exists and is valid
-            // println!("skipping {}", download_file.display());
+            // TODO: println!("skipping {}", download_file.display());
         } else {
-            //TODO: Remove Dir and Manifest file, because eiter one is missing or the manifest is corrupt
+            //TODO: if either one of Dir or Manifest file is missing or corrupt, remove them,
 
             println!("{} -> {}", download_file.display(), archive.display());
             typ.decompress(&download_file, &archive).unwrap();
+
+            // Rename all extracted files to their lower-case counterpart
+            // This is especially important for fomod mods, because otherwise we would
+            // not know if their name in the fomod package matches their actual names.
+            rename_recursive(&archive)?;
 
             let manifest = Manifest::new(archive_dir, &f);
             manifest.write_manifest(archive_dir)?;
         }
     }
+    Ok(())
+}
+
+fn rename_recursive(path: &Path) -> Result<()> {
+    let walker = WalkDir::new(path)
+        .min_depth(1)
+        .max_depth(usize::MAX)
+        .follow_links(false)
+        .same_file_system(true)
+        .contents_first(true);
+
+    for entry in walker {
+        let entry = entry?;
+        let entry_path = entry.path();
+
+        if entry_path.is_dir() || entry_path.is_file() {
+            lower_case(entry_path)?;
+        } else {
+            continue;
+        }
+    }
+
+    Ok(())
+}
+
+fn lower_case(path: &Path) -> Result<()> {
+    let name = path.file_name().unwrap().to_string_lossy();
+    let name = name.to_lowercase();
+    let name = OsString::from(name);
+    let name = name.as_os_str();
+    let name = path.with_file_name(name);
+
+    // println!("ren {} -> {}", path.display(), name.display());
+
+    std::fs::rename(path, path.with_file_name(name).as_path())?;
+
     Ok(())
 }

@@ -20,6 +20,9 @@ thiserror = "1.0"
 unrar = "0.5.1"
 ron = "0.8"
 serde = { version = "1", features = ["derive"] }
+libloadorder = "11.4.1"
+fomod = { git = "https://github.com/luctius/fomod" }
+walkdir = "2.4.0"
 # enum-kinds = "0.5.1"
 
 [build-dependencies]

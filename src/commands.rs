@@ -14,6 +14,7 @@ pub enum Subcommands {
     ExtractDownloads,
     List,
     Enable,
+    Disable,
 }
 impl Subcommands {
     pub fn execute(self, settings: &Settings) -> Result<()> {
@@ -24,6 +25,7 @@ impl Subcommands {
             }
             Subcommands::List => modlist::list_mods(&settings.archive_dir),
             Subcommands::Enable => enable::enable_all(&settings.archive_dir, &settings.game_dir),
+            Subcommands::Disable => enable::disable_all(&settings.archive_dir, &settings.game_dir),
         }
     }
 }

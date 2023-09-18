@@ -1,8 +1,7 @@
 use std::{
-    arch,
     ffi::OsStr,
     fmt::Display,
-    fs::{self, DirBuilder, File},
+    fs::{self, read_link, remove_file, DirBuilder, File},
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
@@ -15,7 +14,10 @@ use serde::{Deserialize, Serialize};
 const MANIFEST_EXTENTION_NAME: &'static str = "ron";
 const DATA_DIR_NAME: &'static str = "data";
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize)]
+const FOMOD_INFO_FILE: &'static str = "fomod/info.xml";
+const FOMOD_MODCONFIG_FILE: &'static str = "fomod/moduleconfig.xml";
+
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ModState {
     Enabled,
     Disabled,
@@ -48,7 +50,7 @@ impl Display for ModState {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Manifest {
     name: String,
-    modtype: ModType,
+    mod_type: ModType,
     mod_state: ModState,
     files: Vec<PathBuf>,
     priority: isize,
@@ -66,20 +68,25 @@ impl Manifest {
 
         Self::traverse_dir(&dir, &dir, &mut files);
 
-        if files.iter().any(|p| *p == PathBuf::from("fomod/info.xml")) {
+        if files.iter().any(|p| *p == PathBuf::from(FOMOD_INFO_FILE)) {
             if files
                 .iter()
-                .any(|p| *p == PathBuf::from("fomod/ModuleConfig.xml"))
+                .any(|p| *p == PathBuf::from(FOMOD_MODCONFIG_FILE))
             {
                 typ = ModType::FoMod;
             }
+
+            //TODO: check for a data dir further in the file tree
+            // to detect mods with an extra dir
+            // we can also make a list of approved dirs for data mods
+            // and warn the user about other dirs.
 
             // filter some file types like readme.txt??
         }
 
         Self {
             name: name.to_string_lossy().to_string(),
-            modtype: typ,
+            mod_type: typ,
             files,
             mod_state: ModState::Disabled,
             priority: 0,
@@ -99,6 +106,10 @@ impl Manifest {
         path.push(&self.name);
         path.set_extension(MANIFEST_EXTENTION_NAME);
 
+        if path.exists() {
+            remove_file(&path)?;
+        }
+
         let mut file = File::create(&path)?;
 
         let serialized =
@@ -113,16 +124,19 @@ impl Manifest {
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn modtype(&self) -> ModType {
-        self.modtype
+    pub fn mod_type(&self) -> ModType {
+        self.mod_type
     }
     pub fn mod_state(&self) -> ModState {
         self.mod_state
     }
     pub fn enable(&self, archive_dir: &str, game_dir: &str) -> Result<()> {
-        let _ = self.disable(archive_dir, game_dir);
+        if self.mod_state == ModState::Enabled {
+            return Ok(());
+        }
 
-        if self.modtype() != ModType::DataMod {
+        // TODO allow all mod types
+        if self.mod_type() != ModType::DataMod {
             return Ok(());
         }
 
@@ -141,18 +155,82 @@ impl Manifest {
                 game_dir
             };
 
+            if destination.is_dir() {
+                //TODO do dirbuilder only on directories?
+                continue;
+            }
+
             //create intermediate directories
             DirBuilder::new()
                 .recursive(true)
                 .create(destination.parent().unwrap())?;
 
-            //TODO conflict detection and resolution
-            println!("link {} to {}", origin.display(), destination.display());
-            std::os::unix::fs::symlink(origin, destination)?;
+            //TODO conflict detection and resolution should prevent this
+
+            // Remove existing symlinks which point back to our archive dir
+            // This ensures that the last mod wins, but we should do conflict
+            // detection and resolution before this, so we can inform the user.
+            if destination.is_symlink() {
+                let target = read_link(&destination)?;
+
+                if target.starts_with(&archive_dir) {
+                    remove_file(&destination)?;
+                    //TODO verbose println!("removed {} -> {}", destination.display(), target.display());
+                } else {
+                    //TODO: can we handle foreign files better than this?
+                    eprintln!("Not removing forein file: {}", target.display());
+                    continue;
+                }
+            }
+
+            std::os::unix::fs::symlink(&origin, &destination)?;
+
+            //TODO: verbose println!("link {} to {}", origin.display(), destination.display());
         }
+
+        let mut manifest = self.clone();
+        manifest.mod_state = ModState::Enabled;
+        manifest.write_manifest(&archive_dir.to_string_lossy().to_string())?;
+
         Ok(())
     }
     pub fn disable(&self, archive_dir: &str, game_dir: &str) -> Result<()> {
+        if self.mod_state == ModState::Disabled {
+            return Ok(());
+        }
+
+        let archive_dir = PathBuf::from(archive_dir);
+        let game_dir = PathBuf::from(game_dir);
+
+        for (of, df) in self.origin_files().iter().zip(self.dest_files().iter()) {
+            let origin = {
+                let mut archive_dir = archive_dir.clone();
+                archive_dir.push(of);
+                archive_dir
+            };
+            let destination = {
+                let mut game_dir = game_dir.clone();
+                game_dir.push(df);
+                game_dir
+            };
+
+            if destination.is_file()
+                && destination.is_symlink()
+                && origin == read_link(&destination)?
+            {
+                remove_file(&destination)?;
+                //TODO verbose println!("removed {} -> {}", destination.display(), origin.display());
+            } else if destination.is_dir() {
+                //TODO remove empty dirs?
+            } else {
+                //TODO verbose println!("Skipping {}", destination.display());
+            }
+        }
+
+        let mut manifest = self.clone();
+        manifest.mod_state = ModState::Disabled;
+        manifest.write_manifest(&archive_dir.to_string_lossy().to_string())?;
+
         Ok(())
     }
     pub fn dest_files(&self) -> Vec<String> {
@@ -189,12 +267,16 @@ impl Manifest {
         self.priority
     }
     fn traverse_dir(base: &Path, dir: &Path, files: &mut Vec<PathBuf>) {
+        // use walkdir?
+
         let paths = fs::read_dir(dir).unwrap();
 
         for path in paths {
             if let Ok(path) = path {
                 if let Ok(ft) = path.file_type() {
                     if ft.is_file() {
+                        //TODO Skip files like readme.txt?
+
                         if let Ok(path) = path.path().strip_prefix(base) {
                             files.push(path.to_path_buf())
                         }
@@ -231,4 +313,13 @@ pub enum ModType {
     FoMod,
     //Goes into the root dir
     AppMod,
+}
+impl Display for ModType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::DataMod => f.write_str("Data Mod"),
+            Self::FoMod => f.write_str("FoMod"),
+            Self::AppMod => f.write_str("AppMod"),
+        }
+    }
 }
