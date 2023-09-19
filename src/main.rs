@@ -1,13 +1,20 @@
+use anyhow::Result;
 use clap::Parser;
 
 //TODO: seperate into a lib
 mod commands;
 mod decompress;
 use commands::Subcommands;
+mod installers;
 mod manifest;
+mod mod_types;
+mod settings;
 
+use settings::Settings;
 use shadow_rs::shadow;
 shadow!(build);
+
+const APP_NAMES: [&'static str; 1] = ["starmod"];
 
 /// Simple Starfield Modding Application
 #[derive(Parser, Debug)]
@@ -21,28 +28,24 @@ pub struct Args {
     command: Option<Subcommands>,
 }
 
-//TODO read from xdg config dir
-#[derive(Clone, Debug)]
-pub struct Settings {
-    download_dir: String,
-    archive_dir: String,
-    game_dir: String,
-}
-impl Settings {
-    pub fn new() -> Self {
-        Self {
-            download_dir: "/home/cor/downloads/dmodman/starfield".to_owned(),
-            archive_dir: "/home/cor/tmp/starmod".to_owned(),
-            game_dir: "/home/cor/tmp/stargame".to_owned(),
-        }
-    }
-}
-
-pub fn main() {
+pub fn main() -> Result<()> {
     let args = Args::parse();
 
-    let settings = Settings::new();
+    let settings = Settings::read_config()?;
 
-    let cmd = args.command.unwrap_or(Subcommands::List);
-    cmd.execute(&settings).unwrap();
+    if !settings.valid_config() {
+        if let Some(cmd @ Subcommands::CreateConfig { .. }) = args.command {
+            cmd.execute(&settings)?;
+        } else {
+            println!(
+                "Not valid config file found; Please run {} create-config first.",
+                settings.cmd_name()
+            );
+        }
+    } else {
+        let cmd = args.command.unwrap_or(Subcommands::List);
+        cmd.execute(&settings)?;
+    }
+
+    Ok(())
 }

@@ -1,25 +1,43 @@
+use std::path::Path;
+
 use anyhow::Result;
 
 use crate::commands::modlist;
 
-pub fn enable_all(archive_dir: &str, game_dir: &str) -> Result<()> {
-    let mod_list = modlist::gather_mods(archive_dir)?;
+use super::modlist::find_mod;
+
+pub fn enable_all(cache_dir: &Path, game_dir: &Path) -> Result<()> {
+    let mod_list = modlist::gather_mods(cache_dir)?;
 
     for manifest in mod_list {
-        manifest.enable(archive_dir, game_dir)?;
+        manifest.enable(cache_dir, game_dir)?;
     }
 
-    //TODO verbose
-    modlist::list_mods(archive_dir)
+    Ok(())
 }
 
-pub fn disable_all(archive_dir: &str, game_dir: &str) -> Result<()> {
-    let mod_list = modlist::gather_mods(archive_dir)?;
+pub fn disable_all(cache_dir: &Path, game_dir: &Path) -> Result<()> {
+    let mod_list = modlist::gather_mods(cache_dir)?;
 
     for manifest in mod_list {
-        manifest.disable(archive_dir, game_dir)?;
+        manifest.disable(cache_dir, game_dir)?;
     }
 
-    //TODO verbose
-    modlist::list_mods(archive_dir)
+    Ok(())
+}
+
+pub fn enable_mod(cache_dir: &Path, game_dir: &Path, name: &str) -> Result<()> {
+    if let Some(manifest) = find_mod(cache_dir, &name)? {
+        manifest.enable(cache_dir, game_dir)?;
+    }
+
+    Ok(())
+}
+
+pub fn disable_mod(cache_dir: &Path, game_dir: &Path, name: &str) -> Result<()> {
+    if let Some(manifest) = find_mod(cache_dir, &name)? {
+        manifest.disable(cache_dir, game_dir)?;
+    }
+
+    Ok(())
 }
