@@ -1,4 +1,5 @@
 use std::{
+    ffi::OsString,
     fmt::Display,
     path::{Path, PathBuf},
 };
@@ -18,10 +19,10 @@ use crate::{
 
 // use FOMOD_INFO_FILE;
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ModType {
     // Goes into Data
-    DataMod,
+    DataMod { data_start: PathBuf },
     //Installer
     FoMod,
     //Goes into the root dir
@@ -30,9 +31,15 @@ pub enum ModType {
 impl ModType {
     pub fn create_manifest(self, cache_dir: &Path, name: &Path) -> Result<Manifest> {
         match self {
-            Self::DataMod => create_data_manifest(self, cache_dir, name),
+            Self::DataMod { .. } => create_data_manifest(self, cache_dir, name),
             Self::FoMod => create_fomod_manifest(self, cache_dir, name),
             Self::Plugin => create_plugin_manifest(self, cache_dir, name),
+        }
+    }
+    pub fn prefix_to_strip(&self) -> PathBuf {
+        match self {
+            Self::FoMod | Self::Plugin => PathBuf::new(),
+            Self::DataMod { data_start } => data_start.to_owned(),
         }
     }
     pub fn detect_mod_type(cache_dir: &Path, name: &Path) -> Result<Self> {
@@ -69,7 +76,7 @@ impl ModType {
             }
         }
 
-        let walker = WalkDir::new(archive_dir)
+        let walker = WalkDir::new(&archive_dir)
             .min_depth(1)
             .max_depth(3)
             .follow_links(false)
@@ -87,13 +94,38 @@ impl ModType {
             }
         }
 
-        Ok(Self::DataMod)
+        let mut data_path = None;
+
+        let walker = WalkDir::new(&archive_dir)
+            .min_depth(1)
+            .max_depth(4)
+            .follow_links(false)
+            .same_file_system(true)
+            .contents_first(true);
+
+        for entry in walker {
+            let entry = entry?;
+            let entry_path = entry.path();
+            if entry_path.is_dir() && entry.path().file_name().unwrap() == OsString::from("data") {
+                if data_path.is_none() {
+                    let entry_path = entry_path.to_path_buf();
+                    data_path = Some(entry_path.strip_prefix(&archive_dir)?.to_path_buf());
+                } else {
+                    panic!("FIXME: HANDLE MULTIPLE DATA DIRS FOUND");
+                }
+            }
+        }
+        dbg!(&data_path);
+
+        Ok(Self::DataMod {
+            data_start: data_path.unwrap_or_else(|| PathBuf::from("")),
+        })
     }
 }
 impl Display for ModType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::DataMod => f.write_str("Data"),
+            Self::DataMod { .. } => f.write_str("Data"),
             Self::FoMod => f.write_str("FoMod"),
             Self::Plugin => f.write_str("Plugin"),
         }

@@ -24,14 +24,14 @@ thiserror = "1.0"
 unrar = "0.5.1"
 ron = "0.8"
 serde = { version = "1", features = ["derive"] }
-libloadorder = "11.4.1"
+# libloadorder = "11.4.1"
 fomod = "0.2.0"
 walkdir = "2.4.0"
 xdg = "2.5.2"
 fuzzy-matcher = "0.3.7"
 comfy-table = "7.0.1"
 encoding_rs_io = "0.1.7"
-camino = "1.1.6"
+# camino = "1.1.6" //TODO use camino instead of Path and PathBuf
 # enum-kinds = "0.5.1"
 
 [build-dependencies]

@@ -1,5 +1,8 @@
 use anyhow::Result;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::{OsStr, OsString},
+    path::{Path, PathBuf},
+};
 
 use walkdir::WalkDir;
 
@@ -9,51 +12,56 @@ use crate::{
 };
 
 pub fn create_data_manifest(mod_type: ModType, cache_dir: &Path, name: &Path) -> Result<Manifest> {
-    let mut files = Vec::new();
-    let mut disabled_files = Vec::new();
+    if let ModType::DataMod { data_start } = &mod_type {
+        let mut files = Vec::new();
+        let mut disabled_files = Vec::new();
 
-    let mut archive_dir = PathBuf::from(cache_dir);
-    archive_dir.push(name);
+        let mut archive_dir = PathBuf::from(cache_dir);
+        archive_dir.push(name);
 
-    //FIXME TODO Seek for deeper data dir and strip the prefix from destination
-    //TODO: check for a data dir further in the file tree
-    // to detect mods with an extra dir
-    // we can also make a list of approved dirs for data mods
-    // and warn the user about other dirs.
+        //FIXME TODO Seek for deeper data dir and strip the prefix from destination
+        //TODO: check for a data dir further in the file tree
+        // to detect mods with an extra dir
+        // we can also make a list of approved dirs for data mods
+        // and warn the user about other dirs.
 
-    let walker = WalkDir::new(&archive_dir)
-        .min_depth(1)
-        .max_depth(usize::MAX)
-        .follow_links(false)
-        .same_file_system(true)
-        .contents_first(false);
+        let walker = WalkDir::new(&archive_dir)
+            .min_depth(1)
+            .max_depth(usize::MAX)
+            .follow_links(false)
+            .same_file_system(true)
+            .contents_first(false);
 
-    for entry in walker {
-        let entry = entry?;
-        let entry_path = entry.path();
+        for entry in walker {
+            let entry = entry?;
+            let entry_path = entry.path();
 
-        if entry_path.is_file() {
-            files.push(entry_path.to_path_buf().strip_prefix(&archive_dir)?.into());
+            if entry_path.is_file() {
+                files.push(entry_path.to_path_buf().strip_prefix(&archive_dir)?.into());
+            }
         }
+
+        // Disable all files containing 'readme' in the name
+        files.retain(|f: &InstallFile| {
+            if !f.source.starts_with(&data_start)
+                || f.source
+                    .file_name()
+                    .unwrap()
+                    .to_str()
+                    .unwrap()
+                    .contains("readme")
+            {
+                disabled_files.push(f.clone());
+                false
+            } else {
+                true
+            }
+        });
+
+        let name = name.to_string_lossy().to_string();
+
+        Ok(Manifest::new(name, mod_type, files, disabled_files))
+    } else {
+        panic!("no data mod");
     }
-
-    // Disable all files containing 'readme' in the name
-    files.retain(|f: &InstallFile| {
-        if f.source
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("readme")
-        {
-            disabled_files.push(f.clone());
-            false
-        } else {
-            true
-        }
-    });
-
-    let name = name.to_string_lossy().to_string();
-
-    Ok(Manifest::new(name, mod_type, files, disabled_files))
 }

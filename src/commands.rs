@@ -11,6 +11,8 @@ use anyhow::Result;
 
 use crate::Settings;
 
+use self::modlist::{find_mod, gather_mods};
+
 #[derive(Subcommand, Debug, Clone)]
 pub enum Subcommands {
     ListDownloads,
@@ -23,6 +25,7 @@ pub enum Subcommands {
     EnableAll,
     Enable {
         name: String,
+        priority: Option<isize>,
     },
     DisableAll,
     Disable {
@@ -37,7 +40,11 @@ pub enum Subcommands {
         cache_dir: Option<PathBuf>,
     },
     //Remove { name: String },
-    //InsertAt { name: String, priority: i32 },
+    SetPriority {
+        name: String,
+        priority: isize,
+    },
+    //InsertAt { name: String, priority: isize },
     ShowConfig,
     PurgeConfig,
     PurgeCache,
@@ -61,9 +68,13 @@ impl Subcommands {
                 enable::enable_all(&settings.cache_dir(), &settings.game_dir())?;
                 modlist::list_mods(&settings.cache_dir())
             }
-            Subcommands::Enable { name } => {
-                enable::enable_mod(&settings.cache_dir(), &settings.game_dir(), &name)?;
-                modlist::show_mod(&settings.cache_dir(), &name)
+            Subcommands::Enable { name, priority } => {
+                enable::enable_mod(&settings.cache_dir(), &settings.game_dir(), &name, priority)?;
+                if priority.is_none() {
+                    modlist::show_mod(&settings.cache_dir(), &name)
+                } else {
+                    modlist::list_mods(&settings.cache_dir())
+                }
             }
             Subcommands::DisableAll => {
                 enable::disable_all(&settings.cache_dir(), &settings.game_dir())?;
@@ -89,6 +100,15 @@ impl Subcommands {
             Subcommands::PurgeCache => {
                 enable::disable_all(&settings.cache_dir(), &settings.game_dir())?;
                 settings.purge_cache()
+            }
+            Subcommands::SetPriority { name, priority } => {
+                let mod_list = gather_mods(&settings.cache_dir())?;
+                if let Some(mut m) = find_mod(&mod_list, &name) {
+                    m.set_priority(priority);
+                    m.write_manifest(&settings.cache_dir())?;
+                    modlist::list_mods(&settings.cache_dir())?;
+                }
+                Ok(())
             }
         }
     }

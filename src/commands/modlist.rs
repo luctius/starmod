@@ -107,40 +107,6 @@ pub fn show_mod(cache_dir: &Path, mod_name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn find_mod(mod_list: &[Manifest], mod_name: &str) -> Option<Manifest> {
-    if let Some(m) = find_mod_by_name(mod_list, &mod_name) {
-        Some(m)
-    } else if let Ok(idx) = usize::from_str_radix(&mod_name, 10) {
-        find_mod_by_index(mod_list, idx)
-    } else if let Some(m) = find_mod_by_name_fuzzy(mod_list, &mod_name) {
-        Some(m)
-    } else {
-        None
-    }
-}
-
-pub fn find_mod_by_index(mod_list: &[Manifest], idx: usize) -> Option<Manifest> {
-    mod_list.get(idx).map(|m| m.clone())
-}
-pub fn find_mod_by_name(mod_list: &[Manifest], name: &str) -> Option<Manifest> {
-    mod_list
-        .iter()
-        .find_map(|m| (m.name() == name).then(|| m.clone()))
-}
-pub fn find_mod_by_name_fuzzy(mod_list: &[Manifest], fuzzy_name: &str) -> Option<Manifest> {
-    let matcher = SkimMatcherV2::default();
-    let mut match_vec = Vec::new();
-
-    mod_list.iter().for_each(|m| {
-        let i = matcher.fuzzy_match(m.name(), &fuzzy_name).unwrap_or(0);
-        match_vec.push((m, i));
-    });
-
-    match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
-
-    match_vec.last().map(|(m, _)| (*m).clone())
-}
-
 //TODO: fancier printing
 //TODO move this to manifest Display
 pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()> {
@@ -181,4 +147,41 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
     }
 
     Ok(())
+}
+
+pub fn find_mod(mod_list: &[Manifest], mod_name: &str) -> Option<Manifest> {
+    if let Some(m) = find_mod_by_name(mod_list, &mod_name) {
+        dbg!(&m);
+        Some(m)
+    } else if let Ok(idx) = usize::from_str_radix(&mod_name, 10) {
+        dbg!(idx);
+        find_mod_by_index(mod_list, idx)
+    } else if let Some(m) = find_mod_by_name_fuzzy(mod_list, &mod_name) {
+        dbg!(&m);
+        Some(m)
+    } else {
+        None
+    }
+}
+
+pub fn find_mod_by_index(mod_list: &[Manifest], idx: usize) -> Option<Manifest> {
+    mod_list.get(idx).map(|m| m.clone())
+}
+pub fn find_mod_by_name(mod_list: &[Manifest], name: &str) -> Option<Manifest> {
+    mod_list
+        .iter()
+        .find_map(|m| (m.name() == name).then(|| m.clone()))
+}
+pub fn find_mod_by_name_fuzzy(mod_list: &[Manifest], fuzzy_name: &str) -> Option<Manifest> {
+    let matcher = SkimMatcherV2::default();
+    let mut match_vec = Vec::new();
+
+    mod_list.iter().for_each(|m| {
+        let i = matcher.fuzzy_match(m.name(), &fuzzy_name).unwrap_or(0);
+        match_vec.push((m, i));
+    });
+
+    match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
+
+    match_vec.last().map(|(m, _)| (*m).clone())
 }

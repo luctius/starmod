@@ -109,6 +109,9 @@ impl Manifest {
         // println!("Creating Manifest: {:?}", s);
         s
     }
+    pub fn set_priority(&mut self, priority: isize) {
+        self.priority = priority;
+    }
     pub fn from_file(cache_dir: &Path, archive: &Path) -> Result<Self> {
         let mut manifest_file = PathBuf::from(cache_dir);
         manifest_file.push(archive);
@@ -145,19 +148,18 @@ impl Manifest {
         //TODO Allow for names set by fomod
         &self.name.split_once("-").unwrap().0
     }
-    pub fn mod_type(&self) -> ModType {
-        self.mod_type
+    pub fn mod_type(&self) -> &ModType {
+        &self.mod_type
     }
     pub fn mod_state(&self) -> ModState {
         self.mod_state
     }
-    pub fn enable(&self, cache_dir: &Path, game_dir: &Path) -> Result<()> {
+    pub fn enable(&mut self, cache_dir: &Path, game_dir: &Path) -> Result<()> {
         if self.mod_state.is_enabled() {
             return Ok(());
         }
-
-        // TODO allow all mod types
-        if self.mod_type() != ModType::DataMod {
+        if self.priority < 0 {
+            self.disable(cache_dir, game_dir)?;
             return Ok(());
         }
 
@@ -170,23 +172,18 @@ impl Manifest {
                 cache_dir.push(of);
                 cache_dir
             };
+
             let destination = {
                 let mut game_dir = game_dir.clone();
-                game_dir.push(df);
+                game_dir.push(PathBuf::from(DATA_DIR_NAME));
+                game_dir.push(PathBuf::from(df).strip_prefix(self.mod_type.prefix_to_strip())?);
                 game_dir
             };
-
-            if destination.is_dir() {
-                //TODO do dirbuilder only on directories?
-                continue;
-            }
 
             //create intermediate directories
             DirBuilder::new()
                 .recursive(true)
                 .create(destination.parent().unwrap())?;
-
-            //TODO conflict detection and resolution should prevent this
 
             // Remove existing symlinks which point back to our archive dir
             // This ensures that the last mod wins, but we should do conflict
@@ -209,13 +206,11 @@ impl Manifest {
             //TODO: verbose println!("link {} to {}", origin.display(), destination.display());
         }
 
-        let mut manifest = self.clone();
-        manifest.mod_state = ModState::Enabled;
-        manifest.write_manifest(&cache_dir)?;
+        self.mod_state = ModState::Enabled;
 
         Ok(())
     }
-    pub fn disable(&self, cache_dir: &Path, game_dir: &Path) -> Result<()> {
+    pub fn disable(&mut self, cache_dir: &Path, game_dir: &Path) -> Result<()> {
         if self.mod_state.is_disabled() {
             return Ok(());
         }
@@ -248,9 +243,7 @@ impl Manifest {
             }
         }
 
-        let mut manifest = self.clone();
-        manifest.mod_state = ModState::Disabled;
-        manifest.write_manifest(&cache_dir)?;
+        self.mod_state = ModState::Disabled;
 
         Ok(())
     }
@@ -259,13 +252,13 @@ impl Manifest {
         for f in &self.files {
             let destination = f.destination.to_string_lossy().to_string().to_lowercase();
 
-            let destination = if destination.starts_with(DATA_DIR_NAME) {
-                destination
-            } else {
-                let mut p = PathBuf::from(DATA_DIR_NAME);
-                p.push(destination);
-                p.to_string_lossy().to_string()
-            };
+            // let destination = if destination.starts_with(DATA_DIR_NAME) {
+            //     destination
+            // } else {
+            //     let mut p = PathBuf::from(DATA_DIR_NAME);
+            //     p.push(destination);
+            //     p.to_string_lossy().to_string()
+            // };
 
             dest_files.push(destination);
         }

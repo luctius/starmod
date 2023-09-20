@@ -36,11 +36,13 @@ pub fn conflict_list_by_file(mods: &[Manifest]) -> Result<HashMap<String, Vec<St
 
     // insert conflicting mods
     mods.iter().for_each(|m| {
-        m.dest_files().iter().for_each(|f| {
-            if let Some(v) = all_files.get_mut(f) {
-                v.push(m.name().to_string());
-            }
-        })
+        if m.mod_state().is_enabled() {
+            m.dest_files().iter().for_each(|f| {
+                if let Some(v) = all_files.get_mut(f) {
+                    v.push(m.name().to_string());
+                }
+            })
+        }
     });
 
     // Remove all files without conflicts
