@@ -1,6 +1,6 @@
 use std::{
     fmt::Display,
-    fs::File,
+    fs::{DirBuilder, File},
     path::{Path, PathBuf},
 };
 
@@ -141,19 +141,44 @@ fn decompress_zip(from_path: &Path, destination_path: &Path) -> Result<()> {
 fn decompress_rar(from_path: &Path, destination_path: &Path) -> Result<()> {
     use unrar::Archive;
 
-    let archive = Archive::new(from_path)
+    // let archive = Archive::new(from_path)
+    //     .open_for_processing()
+    //     .with_context(|| format!("Failed to open archive: {}", path_result(destination_path)))?;
+    // let archive = archive
+    //     .read_header()?
+    //     .ok_or_else(|| DecompressError::RarHeaderNotFound(from_path.to_path_buf()))?;
+
+    let mut archive = Archive::new(from_path)
         .open_for_processing()
         .with_context(|| format!("Failed to open archive: {}", path_result(destination_path)))?;
-    let archive = archive
-        .read_header()?
-        .ok_or_else(|| DecompressError::RarHeaderNotFound(from_path.to_path_buf()))?;
 
-    archive.extract_to(destination_path).with_context(|| {
-        format!(
-            "Failed to unpack into destination : {}",
-            path_result(destination_path)
-        )
-    })?;
+    while let Some(header) = archive.read_header()? {
+        archive = if header.entry().is_file() {
+            let mut file_path = destination_path.to_path_buf();
+            file_path.push(&header.entry().filename);
+
+            DirBuilder::new()
+                .recursive(true)
+                .create(file_path.parent().unwrap())?;
+
+            // header.extract()?
+            header.extract_to(file_path).with_context(|| {
+                format!(
+                    "Failed to unpack into destination : {}",
+                    path_result(destination_path)
+                )
+            })?
+        } else {
+            header.skip()?
+        };
+    }
+
+    // archive.extract_to(destination_path).with_context(|| {
+    //     format!(
+    //         "Failed to unpack into destination : {}",
+    //         path_result(destination_path)
+    //     )
+    // })?;
 
     Ok(())
 }

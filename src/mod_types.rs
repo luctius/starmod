@@ -115,8 +115,6 @@ impl ModType {
                 }
             }
         }
-        dbg!(&data_path);
-
         Ok(Self::DataMod {
             data_start: data_path.unwrap_or_else(|| PathBuf::from("")),
         })

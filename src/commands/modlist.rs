@@ -151,13 +151,10 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
 
 pub fn find_mod(mod_list: &[Manifest], mod_name: &str) -> Option<Manifest> {
     if let Some(m) = find_mod_by_name(mod_list, &mod_name) {
-        dbg!(&m);
         Some(m)
     } else if let Ok(idx) = usize::from_str_radix(&mod_name, 10) {
-        dbg!(idx);
         find_mod_by_index(mod_list, idx)
     } else if let Some(m) = find_mod_by_name_fuzzy(mod_list, &mod_name) {
-        dbg!(&m);
         Some(m)
     } else {
         None

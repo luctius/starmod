@@ -237,7 +237,7 @@ impl Manifest {
                 remove_file(&destination)?;
                 //TODO verbose println!("removed {} -> {}", destination.display(), origin.display());
             } else if destination.is_dir() {
-                //TODO remove empty dirs?
+                //TODO remove empty dirs
             } else {
                 //TODO verbose println!("Skipping {}", destination.display());
             }
@@ -251,14 +251,6 @@ impl Manifest {
         let mut dest_files = Vec::with_capacity(self.files.len());
         for f in &self.files {
             let destination = f.destination.to_string_lossy().to_string().to_lowercase();
-
-            // let destination = if destination.starts_with(DATA_DIR_NAME) {
-            //     destination
-            // } else {
-            //     let mut p = PathBuf::from(DATA_DIR_NAME);
-            //     p.push(destination);
-            //     p.to_string_lossy().to_string()
-            // };
 
             dest_files.push(destination);
         }
