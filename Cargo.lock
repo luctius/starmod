@@ -472,8 +472,7 @@ dependencies = [
 [[package]]
 name = "fomod"
 version = "0.2.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "286e5075961b8686ecef731c1e0ce36515b9f476a2ae27346c3edc38fc8199d1"
+source = "git+https://github.com/luctius/fomod.git?branch=main#1d47615f930fdb236944bacc2df23e4a22575b5a"
 dependencies = [
  "quick-xml",
  "serde",
@@ -822,6 +821,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ec0be4795e2f6a28069bec0b5ff3e2ac9bafc99e6a9a7dc3547996c5c816922c"
 
 [[package]]
+name = "read-stdin"
+version = "1.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5ad612fd0f19a9d97ef34e4aaf208e035adce357667b2584ab24a0a90b1272a0"
+
+[[package]]
 name = "redox_syscall"
 version = "0.3.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1033,6 +1038,7 @@ dependencies = [
  "flate2",
  "fomod",
  "fuzzy-matcher",
+ "read-stdin",
  "ron",
  "rust-lzma",
  "serde",

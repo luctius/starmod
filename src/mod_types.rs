@@ -13,6 +13,7 @@ use crate::{
         data::create_data_manifest,
         fomod::{create_fomod_manifest, FOMOD_INFO_FILE, FOMOD_MODCONFIG_FILE},
         plugin::create_plugin_manifest,
+        InstallerError,
     },
     manifest::Manifest,
 };
@@ -111,7 +112,9 @@ impl ModType {
                     let entry_path = entry_path.to_path_buf();
                     data_path = Some(entry_path.strip_prefix(&archive_dir)?.to_path_buf());
                 } else {
-                    panic!("FIXME: HANDLE MULTIPLE DATA DIRS FOUND");
+                    Err(InstallerError::MultipleDataDirectories(
+                        name.to_string_lossy().to_string(),
+                    ))?;
                 }
             }
         }

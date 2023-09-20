@@ -1,6 +1,6 @@
 use std::{
     ffi::OsString,
-    fs::{self, metadata},
+    fs::{self, metadata, remove_dir_all, remove_file},
     path::{Path, PathBuf},
 };
 
@@ -62,6 +62,14 @@ pub fn extract_downloaded_files(download_dir: &Path, cache_dir: &Path) -> Result
             // TODO: println!("skipping {}", download_file.display());
         } else {
             //TODO: if either one of Dir or Manifest file is missing or corrupt, remove them,
+
+            if archive.exists() {
+                if archive.is_dir() {
+                    remove_dir_all(&archive)?;
+                } else if archive.is_file() {
+                    remove_file(&archive)?;
+                }
+            }
 
             println!("{} -> {}", download_file.display(), archive.display());
             typ.decompress(&download_file, &archive).unwrap();

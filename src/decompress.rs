@@ -11,8 +11,6 @@ use thiserror::Error;
 pub enum DecompressError {
     #[error("the file `{0}` is in an unsuported format")]
     Unsupported(PathBuf),
-    #[error("the file `{0}` does not contain a correct Rar Header")]
-    RarHeaderNotFound(PathBuf),
 }
 fn path_result(path: &Path) -> String {
     let spath = path.to_str();
@@ -141,13 +139,6 @@ fn decompress_zip(from_path: &Path, destination_path: &Path) -> Result<()> {
 fn decompress_rar(from_path: &Path, destination_path: &Path) -> Result<()> {
     use unrar::Archive;
 
-    // let archive = Archive::new(from_path)
-    //     .open_for_processing()
-    //     .with_context(|| format!("Failed to open archive: {}", path_result(destination_path)))?;
-    // let archive = archive
-    //     .read_header()?
-    //     .ok_or_else(|| DecompressError::RarHeaderNotFound(from_path.to_path_buf()))?;
-
     let mut archive = Archive::new(from_path)
         .open_for_processing()
         .with_context(|| format!("Failed to open archive: {}", path_result(destination_path)))?;
@@ -161,7 +152,6 @@ fn decompress_rar(from_path: &Path, destination_path: &Path) -> Result<()> {
                 .recursive(true)
                 .create(file_path.parent().unwrap())?;
 
-            // header.extract()?
             header.extract_to(file_path).with_context(|| {
                 format!(
                     "Failed to unpack into destination : {}",
@@ -172,13 +162,6 @@ fn decompress_rar(from_path: &Path, destination_path: &Path) -> Result<()> {
             header.skip()?
         };
     }
-
-    // archive.extract_to(destination_path).with_context(|| {
-    //     format!(
-    //         "Failed to unpack into destination : {}",
-    //         path_result(destination_path)
-    //     )
-    // })?;
 
     Ok(())
 }

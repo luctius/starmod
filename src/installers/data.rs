@@ -1,8 +1,5 @@
 use anyhow::Result;
-use std::{
-    ffi::{OsStr, OsString},
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use walkdir::WalkDir;
 

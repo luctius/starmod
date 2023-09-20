@@ -6,15 +6,13 @@ use std::{
 };
 
 use anyhow::Result;
-use fomod::FileType;
 use serde::{Deserialize, Serialize};
 
-use crate::mod_types::ModType;
+use crate::{installers::DATA_DIR_NAME, mod_types::ModType};
 
 //TODO: replace PathBuf with something that is ressilient to deserialisation of non-utf8 characters
 
 const MANIFEST_EXTENTION_NAME: &'static str = "ron";
-const DATA_DIR_NAME: &'static str = "data";
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ModState {
@@ -67,14 +65,6 @@ impl From<&Path> for InstallFile {
         Self {
             source: p.to_path_buf(),
             destination: p.to_path_buf(),
-        }
-    }
-}
-impl From<FileType> for InstallFile {
-    fn from(ft: FileType) -> Self {
-        Self {
-            destination: PathBuf::from(ft.destination.unwrap_or_else(|| ft.source.clone())),
-            source: PathBuf::from(ft.source),
         }
     }
 }
