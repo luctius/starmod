@@ -1,12 +1,13 @@
 use std::{
     fmt::Display,
-    fs::{read_link, remove_file, DirBuilder, File},
+    fs::{read_link, remove_dir, remove_file, DirBuilder, File},
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use walkdir::WalkDir;
 
 use crate::{installers::DATA_DIR_NAME, mod_types::ModType};
 
@@ -230,6 +231,25 @@ impl Manifest {
                 //TODO remove empty dirs
             } else {
                 //TODO verbose println!("Skipping {}", destination.display());
+            }
+        }
+
+        //TODO: this could be optimised
+        // right now it will after every disable try to delete
+        // all directories in the game dir who are empty.
+        let walker = WalkDir::new(&game_dir)
+            .min_depth(1)
+            .max_depth(usize::MAX)
+            .follow_links(false)
+            .same_file_system(true)
+            .contents_first(false);
+
+        for entry in walker {
+            let entry = entry?;
+            let entry_path = entry.path();
+
+            if entry_path.is_dir() {
+                let _ = remove_dir(entry_path);
             }
         }
 
