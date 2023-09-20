@@ -31,6 +31,7 @@ xdg = "2.5.2"
 fuzzy-matcher = "0.3.7"
 comfy-table = "7.0.1"
 encoding_rs_io = "0.1.7"
+camino = "1.1.6"
 # enum-kinds = "0.5.1"
 
 [build-dependencies]

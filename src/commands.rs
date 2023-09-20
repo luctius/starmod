@@ -1,3 +1,4 @@
+mod conflict;
 mod downloads;
 mod enable;
 mod modlist;

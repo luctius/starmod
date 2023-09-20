@@ -5,17 +5,18 @@ use std::{
 };
 
 use anyhow::Result;
-use comfy_table::{presets::NOTHING, ContentArrangement, Table};
+use comfy_table::{presets::NOTHING, Cell, Color, ContentArrangement, Table};
 
-use crate::manifest::Manifest;
+use crate::{
+    commands::conflict::{conflict_list_by_file, conflict_list_by_mod},
+    manifest::Manifest,
+};
 
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 
-//TODO Sort list before printing
-
 pub fn gather_mods(cache_dir: &Path) -> Result<Vec<Manifest>> {
-    let paths = fs::read_dir(cache_dir).unwrap();
+    let paths = fs::read_dir(cache_dir)?;
     let cache_dir = PathBuf::from(cache_dir);
 
     let mut manifest_list = Vec::new();
@@ -37,7 +38,6 @@ pub fn gather_mods(cache_dir: &Path) -> Result<Vec<Manifest>> {
 
     manifest_list.sort_by(|a, b| {
         //Order around priority, or if equal around alfabethic order
-
         let o = a.priority().cmp(&b.priority());
         if o == Ordering::Equal {
             a.name().cmp(b.name())
@@ -49,25 +49,47 @@ pub fn gather_mods(cache_dir: &Path) -> Result<Vec<Manifest>> {
     Ok(manifest_list)
 }
 
-//TODO: fancier printing
 pub fn list_mods(cache_dir: &Path) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
 
     let mut table = Table::new();
     table
         .load_preset(NOTHING)
-        // .apply_modifier(UTF8_ROUND_CORNERS)
         .set_content_arrangement(ContentArrangement::Dynamic)
         .set_width(120)
         .set_header(vec!["Index", "Name", "Priority", "Status", "Mod Type"]);
 
     for (idx, manifest) in mod_list.iter().enumerate() {
+        let conflict_list = conflict_list_by_mod(&mod_list)?;
+        let is_loser = conflict_list
+            .iter()
+            .find(|c| c.name() == manifest.name())
+            .map(|c| !c.losing_to().is_empty())
+            .unwrap_or(false);
+        let is_winner = conflict_list
+            .iter()
+            .find(|c| c.name() == manifest.name())
+            .map(|c| !c.winning_over().is_empty())
+            .unwrap_or(false);
+
+        let color = match (is_loser, is_winner) {
+            (false, false) => Color::White,
+            (false, true) => Color::Green,
+            (true, false) => Color::Red,
+            (true, true) => Color::Blue,
+        };
+        let color = if manifest.mod_state().is_enabled() {
+            color
+        } else {
+            Color::DarkGrey
+        };
+
         table.add_row(vec![
-            idx.to_string(),
-            manifest.name().to_string(),
-            manifest.priority().to_string(),
-            manifest.mod_state().to_string(),
-            manifest.mod_type().to_string(),
+            Cell::new(idx.to_string()).fg(color),
+            Cell::new(manifest.name().to_string()).fg(color),
+            Cell::new(manifest.priority().to_string()).fg(color),
+            Cell::new(manifest.mod_state().to_string()).fg(color),
+            Cell::new(manifest.mod_type().to_string()).fg(color),
         ]);
     }
 
@@ -121,6 +143,7 @@ pub fn find_mod_by_name_fuzzy(cache_dir: &Path, fuzzy_name: &str) -> Result<Opti
     Ok(match_vec.last().map(|(m, _)| (*m).clone()))
 }
 
+//TODO: fancier printing
 //TODO move this to manifest Display
 pub fn show_mod_status(manifest: &Manifest) {
     let mut table = Table::new();
