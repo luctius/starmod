@@ -37,6 +37,7 @@ pub enum Subcommands {
         cache_dir: Option<PathBuf>,
     },
     //Remove { name: String },
+    //InsertAt { name: String, priority: i32 },
     ShowConfig,
     PurgeConfig,
     PurgeCache,

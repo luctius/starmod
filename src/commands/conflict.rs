@@ -6,16 +6,12 @@ use crate::manifest::Manifest;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Conflicts {
-    name: String,
     conflict_files: Vec<String>,
     losing_to_mods: HashSet<String>,
     winning_over_mods: HashSet<String>,
 }
 impl Conflicts {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-    pub fn conflicts(&self) -> &[String] {
+    pub fn conflict_files(&self) -> &[String] {
         &self.conflict_files
     }
     pub fn losing_to(&self) -> &HashSet<String> {
@@ -53,10 +49,10 @@ pub fn conflict_list_by_file(mods: &[Manifest]) -> Result<HashMap<String, Vec<St
     Ok(all_files)
 }
 
-pub fn conflict_list_by_mod(mods: &[Manifest]) -> Result<Vec<Conflicts>> {
+pub fn conflict_list_by_mod(mods: &[Manifest]) -> Result<HashMap<String, Conflicts>> {
     let list = conflict_list_by_file(mods)?;
 
-    let mut mods_conflicts = Vec::new();
+    let mut mods_conflicts = HashMap::new();
     mods.iter().for_each(|m| {
         let mut conflicts = Vec::new();
         let mut losing = HashSet::new();
@@ -78,12 +74,14 @@ pub fn conflict_list_by_mod(mods: &[Manifest]) -> Result<Vec<Conflicts>> {
         });
 
         if !conflicts.is_empty() {
-            mods_conflicts.push(Conflicts {
-                name: m.name().to_string(),
-                conflict_files: conflicts,
-                winning_over_mods: losing,
-                losing_to_mods: winning,
-            });
+            mods_conflicts.insert(
+                m.name().to_string(),
+                Conflicts {
+                    conflict_files: conflicts,
+                    winning_over_mods: losing,
+                    losing_to_mods: winning,
+                },
+            );
         }
     });
 

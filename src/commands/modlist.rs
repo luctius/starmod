@@ -62,13 +62,11 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
     for (idx, manifest) in mod_list.iter().enumerate() {
         let conflict_list = conflict_list_by_mod(&mod_list)?;
         let is_loser = conflict_list
-            .iter()
-            .find(|c| c.name() == manifest.name())
+            .get(&manifest.name().to_string())
             .map(|c| !c.losing_to().is_empty())
             .unwrap_or(false);
         let is_winner = conflict_list
-            .iter()
-            .find(|c| c.name() == manifest.name())
+            .get(&manifest.name().to_string())
             .map(|c| !c.winning_over().is_empty())
             .unwrap_or(false);
 
@@ -100,8 +98,8 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
 
 pub fn show_mod(cache_dir: &Path, mod_name: &str) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
-    if let Some(m) = find_mod(&mod_list, mod_name)? {
-        show_mod_status(&m, &mod_list);
+    if let Some(m) = find_mod(&mod_list, mod_name) {
+        show_mod_status(&m, &mod_list)?;
     } else {
         println!("No mod found by that name: {}", mod_name);
     }
@@ -109,27 +107,27 @@ pub fn show_mod(cache_dir: &Path, mod_name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn find_mod(mod_list: &[Manifest], mod_name: &str) -> Result<Option<Manifest>> {
-    if let Some(m) = find_mod_by_name(mod_list, &mod_name)? {
-        Ok(Some(m))
+pub fn find_mod(mod_list: &[Manifest], mod_name: &str) -> Option<Manifest> {
+    if let Some(m) = find_mod_by_name(mod_list, &mod_name) {
+        Some(m)
     } else if let Ok(idx) = usize::from_str_radix(&mod_name, 10) {
         find_mod_by_index(mod_list, idx)
-    } else if let Some(m) = find_mod_by_name_fuzzy(mod_list, &mod_name)? {
-        Ok(Some(m))
+    } else if let Some(m) = find_mod_by_name_fuzzy(mod_list, &mod_name) {
+        Some(m)
     } else {
-        Ok(None)
+        None
     }
 }
 
-pub fn find_mod_by_index(mod_list: &[Manifest], idx: usize) -> Result<Option<Manifest>> {
-    Ok(mod_list.get(idx).map(|m| m.clone()))
+pub fn find_mod_by_index(mod_list: &[Manifest], idx: usize) -> Option<Manifest> {
+    mod_list.get(idx).map(|m| m.clone())
 }
-pub fn find_mod_by_name(mod_list: &[Manifest], name: &str) -> Result<Option<Manifest>> {
-    Ok(mod_list
+pub fn find_mod_by_name(mod_list: &[Manifest], name: &str) -> Option<Manifest> {
+    mod_list
         .iter()
-        .find_map(|m| (m.name() == name).then(|| m.clone())))
+        .find_map(|m| (m.name() == name).then(|| m.clone()))
 }
-pub fn find_mod_by_name_fuzzy(mod_list: &[Manifest], fuzzy_name: &str) -> Result<Option<Manifest>> {
+pub fn find_mod_by_name_fuzzy(mod_list: &[Manifest], fuzzy_name: &str) -> Option<Manifest> {
     let matcher = SkimMatcherV2::default();
     let mut match_vec = Vec::new();
 
@@ -140,13 +138,14 @@ pub fn find_mod_by_name_fuzzy(mod_list: &[Manifest], fuzzy_name: &str) -> Result
 
     match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
 
-    Ok(match_vec.last().map(|(m, _)| (*m).clone()))
+    match_vec.last().map(|(m, _)| (*m).clone())
 }
 
 //TODO: fancier printing
 //TODO move this to manifest Display
 pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()> {
-    let conflict_list = conflict_list_by_mod(&mod_list)?;
+    let conflict_list_file = conflict_list_by_file(&mod_list)?;
+    let conflict_list_mod = conflict_list_by_mod(&mod_list)?;
 
     let mut table = Table::new();
     table
@@ -162,6 +161,24 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
         ]);
 
     println!("{table}");
+
+    if let Some(conflict) = conflict_list_mod.get(&manifest.name().to_string()) {
+        let mut table = Table::new();
+        table
+            .load_preset(NOTHING)
+            .set_content_arrangement(ContentArrangement::Dynamic)
+            .set_width(120)
+            .set_header(vec!["Conflicting File", "Contenders"]);
+
+        for f in conflict.conflict_files() {
+            if let Some(contenders) = conflict_list_file.get(f) {
+                table.add_row(vec![f.clone(), format!("{:?}", contenders)]);
+            }
+        }
+
+        println!("");
+        println!("{table}");
+    }
 
     Ok(())
 }

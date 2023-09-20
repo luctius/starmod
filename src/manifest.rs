@@ -106,7 +106,7 @@ impl Manifest {
             mod_state: ModState::Disabled,
             priority: 0,
         };
-        println!("Creating Manifest: {:?}", s);
+        // println!("Creating Manifest: {:?}", s);
         s
     }
     pub fn from_file(cache_dir: &Path, archive: &Path) -> Result<Self> {

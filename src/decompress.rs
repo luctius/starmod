@@ -42,9 +42,8 @@ impl SupportedArchives {
             Ok(Self::SevenZip)
         } else if path_str.ends_with(".zip") {
             Ok(Self::Zip)
-            //FIXME TODO
-            // } else if path_str.ends_with(".rar") {
-            // Ok(Self::Rar)
+        } else if path_str.ends_with(".rar") {
+            Ok(Self::Rar)
         } else {
             Err(DecompressError::Unsupported(path.to_path_buf()))?
         }

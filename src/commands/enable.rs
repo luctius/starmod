@@ -27,7 +27,8 @@ pub fn disable_all(cache_dir: &Path, game_dir: &Path) -> Result<()> {
 }
 
 pub fn enable_mod(cache_dir: &Path, game_dir: &Path, name: &str) -> Result<()> {
-    if let Some(manifest) = find_mod(cache_dir, &name)? {
+    let mod_list = modlist::gather_mods(cache_dir)?;
+    if let Some(manifest) = find_mod(&mod_list, &name) {
         manifest.enable(cache_dir, game_dir)?;
     }
 
@@ -35,7 +36,8 @@ pub fn enable_mod(cache_dir: &Path, game_dir: &Path, name: &str) -> Result<()> {
 }
 
 pub fn disable_mod(cache_dir: &Path, game_dir: &Path, name: &str) -> Result<()> {
-    if let Some(manifest) = find_mod(cache_dir, &name)? {
+    let mod_list = modlist::gather_mods(cache_dir)?;
+    if let Some(manifest) = find_mod(&mod_list, &name) {
         manifest.disable(cache_dir, game_dir)?;
     }
 
