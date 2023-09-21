@@ -189,9 +189,7 @@ impl Manifest {
             let destination = {
                 let mut game_dir = game_dir.clone();
                 game_dir.push(PathBuf::from(DATA_DIR_NAME));
-                dbg!(&game_dir);
                 game_dir.push(PathBuf::from(df).strip_prefix(self.mod_type.prefix_to_strip())?);
-                dbg!(&game_dir);
                 game_dir
             };
 
@@ -255,9 +253,7 @@ impl Manifest {
             let destination = {
                 let mut game_dir = game_dir.clone();
                 game_dir.push(PathBuf::from(DATA_DIR_NAME));
-                dbg!(&game_dir);
                 game_dir.push(PathBuf::from(df).strip_prefix(self.mod_type.prefix_to_strip())?);
-                dbg!(&game_dir);
                 game_dir
             };
 
@@ -268,9 +264,6 @@ impl Manifest {
                 remove_file(&destination)?;
                 //TODO verbose println!("removed {} -> {}", destination.display(), origin.display());
             } else {
-                dbg!(&destination);
-                dbg!(destination.is_file());
-                dbg!(destination.is_symlink());
                 // dbg!(origin == read_link(&destination)?);
                 println!("Skipping {}", destination.display());
             }
