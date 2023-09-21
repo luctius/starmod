@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use comfy_table::{presets::NOTHING, Cell, Color, ContentArrangement, Table};
 use serde::{Deserialize, Serialize};
 use std::{
     env,
@@ -12,36 +13,37 @@ use xdg::BaseDirectories;
 
 use crate::game::Game;
 
+const CONFIG_EXTENTION: &'static str = "ron";
 const EDITOR_ENV: &'static str = "EDITOR";
 
 #[derive(Error, Debug)]
 pub enum SettingErrors {
-    #[error("the app is run with an unknown name ({0}), use on of {1}.")]
+    #[error("The app is run with an unknown name ({0}); Please use on of {1}.")]
     WrongAppName(String, String),
-    #[error("no valid config file could be found; Please run '{0} create-config' first.")]
+    #[error("No valid config file could be found; Please run '{0} create-config' first.")]
     ConfigNotFound(String),
-    #[error("game directory for {0} cannot be found, Please run '{1} create-config' and provide manually.")]
+    #[error("The game directory for {0} cannot be found, Please run '{1} create-config' and provide manually.")]
     NoGameDirFound(String, String),
-    #[error("download directory for cannot be found, Please run '{0} create-config' and provide manually.")]
+    #[error("A download directory for cannot be found, Please run '{0} create-config' and provide manually.")]
     NoDownloadDirFound(String),
     #[error(
-        "cache directory cannot be found, Please run '{0} create-config' and provide manually."
+        "The cache directory cannot be found, Please run '{0} create-config' and provide manually."
     )]
     NoCacheDirFound(String),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Settings {
-    #[serde(skip_serializing)]
+    #[serde(skip_serializing, default)]
     game: Game,
     #[serde(skip_serializing, default)]
     verbosity: u8,
+    cache_dir: PathBuf,
     config_path: PathBuf,
     download_dir: PathBuf,
-    cache_dir: PathBuf,
     game_dir: PathBuf,
     proton_dir: Option<PathBuf>,
-    compat_dir: Option<PathBuf>,
+    user_dir: Option<PathBuf>,
     editor: Option<String>,
 }
 impl Settings {
@@ -55,9 +57,11 @@ impl Settings {
 
         let game = Game::create_from_name(name.as_str())?;
 
+        let config_file = PathBuf::from(game.name()).with_extension(CONFIG_EXTENTION);
+
         let xdg_base = BaseDirectories::with_prefix(&name)?;
         let config_path = xdg_base
-            .place_config_file("config.ron")
+            .place_config_file(config_file)
             .with_context(|| format!("Cannot create configuration directory for {}", name))?;
 
         let download_dir = dirs::download_dir().unwrap_or_default();
@@ -67,7 +71,7 @@ impl Settings {
         let editor = env::vars().find_map(|(key, val)| (key == EDITOR_ENV).then(|| val));
 
         let proton_dir = None;
-        let compat_dir = None;
+        let user_dir = None;
 
         Ok(Self {
             game,
@@ -78,7 +82,7 @@ impl Settings {
             game_dir: PathBuf::from(""),
             editor,
             proton_dir,
-            compat_dir,
+            user_dir,
         })
     }
     pub fn valid_config(&self) -> bool {
@@ -123,6 +127,9 @@ impl Settings {
         download_dir: Option<PathBuf>,
         game_dir: Option<PathBuf>,
         cache_dir: Option<PathBuf>,
+        proton_dir: Option<PathBuf>,
+        user_dir: Option<PathBuf>,
+        editor: Option<String>,
     ) -> Result<()> {
         let mut settings = self.clone();
 
@@ -148,6 +155,11 @@ impl Settings {
         settings.download_dir = download_dir;
         settings.game_dir = game_dir;
         settings.cache_dir = cache_dir;
+
+        //FIXME TODO check these if they are provided
+        settings.proton_dir = proton_dir.or_else(|| self.proton_dir.clone());
+        settings.user_dir = user_dir.or_else(|| self.user_dir.clone());
+        settings.editor = editor.or_else(|| self.editor.clone());
 
         let mut file = File::create(&self.config_path)?;
 
@@ -191,9 +203,59 @@ impl TryFrom<File> for Settings {
 }
 impl Display for Settings {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        writeln!(f, "Config file:  {}", self.config_path.display())?;
-        writeln!(f, "Cache dir:    {}", self.cache_dir.display())?;
-        writeln!(f, "Download dir: {}", self.download_dir.display())?;
-        writeln!(f, "Game dir:     {}", self.game_dir.display())
+        let mut table = create_table(vec!["Setting", "Value"]);
+        table
+            .add_row(vec![
+                "Config File".to_owned(),
+                format!("{}", self.config_path.display()),
+            ])
+            .add_row(vec![
+                "Cache Dir".to_owned(),
+                format!("{}", self.cache_dir.display()),
+            ])
+            .add_row(vec![
+                "Download Dir".to_owned(),
+                format!("{}", self.download_dir.display()),
+            ])
+            .add_row(vec![
+                "Game Dir".to_owned(),
+                format!("{}", self.game_dir.display()),
+            ])
+            .add_row(vec![
+                "Steam Proton Dir".to_owned(),
+                format!(
+                    "{}",
+                    self.proton_dir
+                        .as_ref()
+                        .map(|d| d.display().to_string())
+                        .unwrap_or("<Unknown>".to_owned())
+                ),
+            ])
+            .add_row(vec![
+                "User Dir".to_owned(),
+                format!(
+                    "{}",
+                    self.user_dir
+                        .as_ref()
+                        .map(|d| d.display().to_string())
+                        .unwrap_or("<Unknown>".to_owned())
+                ),
+            ])
+            .add_row(vec![
+                "Editor".to_owned(),
+                format!("{}", self.editor.clone().unwrap_or("<Unknown>".to_owned())),
+            ]);
+
+        write!(f, "{}", table)
     }
+}
+
+pub fn create_table(headers: Vec<&'static str>) -> Table {
+    let mut table = Table::new();
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_width(120)
+        .set_header(headers);
+    table
 }

@@ -7,11 +7,12 @@ use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use clap::Subcommand;
-use comfy_table::{presets::NOTHING, Cell, Color, ContentArrangement, Table};
+use comfy_table::{Cell, Color};
 
 use crate::{
     commands::conflict::{conflict_list_by_file, conflict_list_by_mod},
     manifest::Manifest,
+    settings::create_table,
     Settings,
 };
 
@@ -26,6 +27,12 @@ pub enum Subcommands {
         game_dir: Option<PathBuf>,
         #[arg(short, long)]
         cache_dir: Option<PathBuf>,
+        #[arg(short, long)]
+        proton_dir: Option<PathBuf>,
+        #[arg(short, long)]
+        user_dir: Option<PathBuf>,
+        #[arg(short, long)]
+        editor: Option<String>,
         // #[arg(short, long)]
         // find_compat: bool,
         // #[arg(short, long)]
@@ -125,7 +132,17 @@ impl Subcommands {
                 download_dir,
                 game_dir,
                 cache_dir,
-            } => settings.create_config(download_dir, game_dir, cache_dir),
+                proton_dir,
+                user_dir,
+                editor,
+            } => settings.create_config(
+                download_dir,
+                game_dir,
+                cache_dir,
+                proton_dir,
+                user_dir,
+                editor,
+            ),
             Subcommands::ShowConfig => {
                 println!("{}", &settings);
                 Ok(())
@@ -215,16 +232,6 @@ fn edit_mod_config_files(
     }
 
     Ok(())
-}
-
-fn create_table(headers: Vec<&'static str>) -> Table {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_width(120)
-        .set_header(headers);
-    table
 }
 
 pub fn list_mods(cache_dir: &Path) -> Result<()> {

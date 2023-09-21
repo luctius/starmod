@@ -8,8 +8,9 @@ use crate::settings::SettingErrors;
 
 const STEAM_APPS_NAME: &'static str = "steamapps";
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
 pub enum Game {
+    #[default]
     StarMod,
 }
 impl Game {
