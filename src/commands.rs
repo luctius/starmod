@@ -143,7 +143,7 @@ impl Subcommands {
                 user_dir,
                 editor,
             } => {
-                settings.create_config(
+                let settings = settings.create_config(
                     download_dir,
                     game_dir,
                     cache_dir,
@@ -248,29 +248,33 @@ fn edit_mod_config_files(
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 enum Tag {
-    None,
+    Enabled,
     Winner,
     Loser,
     CompleteLoser,
     Conflict,
     Disabled,
 }
-// impl Display for Tag {
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-//         match tag {
-//             Tag::None => ' ',
-//             Tag::Winner => 'w',
-//             Tag::Loser => 'l',
-//             Tag::CompleteLoser => 'L',
-//             Tag::Conflict => 'c',
-//             Tag::Disabled => 'D',
-//         }
-//     }
-// }
+impl Display for Tag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                Tag::Enabled => "Enabled",
+                Tag::Winner => "Winner",
+                Tag::Loser => "Loser",
+                Tag::CompleteLoser => "All Files Overwritten",
+                Tag::Conflict => "Conflict",
+                Tag::Disabled => "Disabled",
+            }
+        )
+    }
+}
 impl From<Tag> for char {
     fn from(tag: Tag) -> Self {
         match tag {
-            Tag::None => ' ',
+            Tag::Enabled => 'e',
             Tag::Winner => 'w',
             Tag::Loser => 'l',
             Tag::CompleteLoser => 'L',
@@ -282,7 +286,7 @@ impl From<Tag> for char {
 impl From<Tag> for Color {
     fn from(tag: Tag) -> Self {
         match tag {
-            Tag::None => Color::White,
+            Tag::Enabled => Color::White,
             Tag::Winner => Color::Green,
             Tag::Loser => Color::Yellow,
             Tag::CompleteLoser => Color::Red,
@@ -294,7 +298,7 @@ impl From<Tag> for Color {
 impl From<(bool, bool)> for Tag {
     fn from((loser, winner): (bool, bool)) -> Self {
         match (loser, winner) {
-            (false, false) => Tag::None,
+            (false, false) => Tag::Enabled,
             (false, true) => Tag::Winner,
             (true, false) => Tag::Loser,
             (true, true) => Tag::Conflict,
@@ -323,7 +327,7 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
         let tag = Tag::from((is_loser, is_winner));
 
         // Detect if we all files of this manifest are overwritten by other mods
-        let tag = if is_loser && !is_winner {
+        let tag = if is_loser {
             let mut file_not_lost = false;
             let conflict_list = conflict_list_by_file(&mod_list)?;
 
@@ -359,7 +363,7 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
             Cell::new(idx.to_string()).fg(color),
             Cell::new(manifest.name().to_string()).fg(color),
             Cell::new(manifest.priority().to_string()).fg(color),
-            Cell::new(manifest.mod_state().to_string()).fg(color),
+            Cell::new(tag).fg(color),
             Cell::new(manifest.version().unwrap_or("<None>").to_string()).fg(color),
             Cell::new(
                 manifest
@@ -461,26 +465,29 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
 }
 
 pub fn show_legenda() -> Result<()> {
-    let mut table = create_table(vec!["Color", "Meaning"]);
+    let mut table = create_table(vec!["Tag", "Color", "Meaning"]);
 
-    let tag = Tag::None;
+    let tag = Tag::Enabled;
     let (color, chr) = (Color::from(tag), char::from(tag));
     table.add_row(vec![
         Cell::new(chr.to_string()).fg(color),
-        Cell::new("Conflict winner for some files, conflict loser for other files.").fg(color),
+        Cell::new("White").fg(color),
+        Cell::new("Nothing to see here; move along citizen.").fg(color),
     ]);
 
     let tag = Tag::Winner;
     let (color, chr) = (Color::from(tag), char::from(tag));
     table.add_row(vec![
         Cell::new(chr.to_string()).fg(color),
-        Cell::new("Complete conflict winner").fg(color),
+        Cell::new("Green").fg(color),
+        Cell::new("Conflict winner").fg(color),
     ]);
 
     let tag = Tag::Loser;
     let (color, chr) = (Color::from(tag), char::from(tag));
     table.add_row(vec![
         Cell::new(chr.to_string()).fg(color),
+        Cell::new("Yellow").fg(color),
         Cell::new("Conflict loser").fg(color),
     ]);
 
@@ -488,13 +495,15 @@ pub fn show_legenda() -> Result<()> {
     let (color, chr) = (Color::from(tag), char::from(tag));
     table.add_row(vec![
         Cell::new(chr.to_string()).fg(color),
-        Cell::new("Complete conflict loser; loses ALL files to other mods").fg(color),
+        Cell::new("Red").fg(color),
+        Cell::new("Complete conflict loser; ALL files are overwitten by other mods").fg(color),
     ]);
 
     let tag = Tag::Conflict;
     let (color, chr) = (Color::from(tag), char::from(tag));
     table.add_row(vec![
         Cell::new(chr.to_string()).fg(color),
+        Cell::new("Magenta").fg(color),
         Cell::new("Conflict winner for some files, conflict loser for other files.").fg(color),
     ]);
 
@@ -502,6 +511,7 @@ pub fn show_legenda() -> Result<()> {
     let (color, chr) = (Color::from(tag), char::from(tag));
     table.add_row(vec![
         Cell::new(chr.to_string()).fg(color),
+        Cell::new("DarkGray").fg(color),
         Cell::new("Mod is disabled.").fg(color),
     ]);
 

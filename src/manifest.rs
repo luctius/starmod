@@ -189,7 +189,9 @@ impl Manifest {
             let destination = {
                 let mut game_dir = game_dir.clone();
                 game_dir.push(PathBuf::from(DATA_DIR_NAME));
+                dbg!(&game_dir);
                 game_dir.push(PathBuf::from(df).strip_prefix(self.mod_type.prefix_to_strip())?);
+                dbg!(&game_dir);
                 game_dir
             };
 
@@ -229,7 +231,7 @@ impl Manifest {
 
             std::os::unix::fs::symlink(&origin, &destination)?;
 
-            //TODO: verbose println!("link {} to {}", origin.display(), destination.display());
+            println!("link {} to {}", origin.display(), destination.display());
         }
 
         self.mod_state = ModState::Enabled;
@@ -252,7 +254,10 @@ impl Manifest {
             };
             let destination = {
                 let mut game_dir = game_dir.clone();
-                game_dir.push(df);
+                game_dir.push(PathBuf::from(DATA_DIR_NAME));
+                dbg!(&game_dir);
+                game_dir.push(PathBuf::from(df).strip_prefix(self.mod_type.prefix_to_strip())?);
+                dbg!(&game_dir);
                 game_dir
             };
 
@@ -262,10 +267,12 @@ impl Manifest {
             {
                 remove_file(&destination)?;
                 //TODO verbose println!("removed {} -> {}", destination.display(), origin.display());
-            } else if destination.is_dir() {
-                //TODO remove empty dirs
             } else {
-                //TODO verbose println!("Skipping {}", destination.display());
+                dbg!(&destination);
+                dbg!(destination.is_file());
+                dbg!(destination.is_symlink());
+                // dbg!(origin == read_link(&destination)?);
+                println!("Skipping {}", destination.display());
             }
         }
 

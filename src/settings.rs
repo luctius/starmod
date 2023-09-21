@@ -11,7 +11,7 @@ use std::{
 use thiserror::Error;
 use xdg::BaseDirectories;
 
-use crate::game::Game;
+use crate::{dmodman::DModManConfig, game::Game};
 
 const CONFIG_EXTENTION: &'static str = "ron";
 const EDITOR_ENV: &'static str = "EDITOR";
@@ -64,7 +64,10 @@ impl Settings {
             .place_config_file(config_file)
             .with_context(|| format!("Cannot create configuration directory for {}", name))?;
 
-        let download_dir = dirs::download_dir().unwrap_or_default();
+        let download_dir = DModManConfig::read().map(|dc| dc.download_dir()).flatten();
+        let download_dir = download_dir
+            .or_else(|| dirs::download_dir())
+            .unwrap_or_default();
 
         let cache_dir = xdg_base.create_cache_directory("").unwrap_or_default();
 
@@ -130,12 +133,18 @@ impl Settings {
         proton_dir: Option<PathBuf>,
         user_dir: Option<PathBuf>,
         editor: Option<String>,
-    ) -> Result<()> {
+    ) -> Result<Self> {
         let mut settings = self.clone();
 
         let cache_dir = cache_dir.unwrap_or(settings.cache_dir);
-        let game_dir = game_dir.unwrap_or(settings.game_dir);
         let download_dir = download_dir.unwrap_or(settings.download_dir);
+        let game_dir = game_dir.unwrap_or(settings.game_dir);
+
+        let game_dir = if game_dir.exists() {
+            game_dir
+        } else {
+            self.game.find_game().unwrap_or(game_dir)
+        };
 
         cache_dir
             .read_dir()
@@ -166,7 +175,7 @@ impl Settings {
         let serialized = ron::ser::to_string_pretty(&settings, ron::ser::PrettyConfig::default())?;
         file.write_all(serialized.as_bytes())?;
 
-        Ok(())
+        Ok(settings)
     }
     pub fn purge_config(&self) -> Result<()> {
         self.purge_cache()?;

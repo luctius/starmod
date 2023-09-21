@@ -1,6 +1,6 @@
 use std::{
     fs::File,
-    io::BufReader,
+    io::{BufReader, Read},
     path::{Path, PathBuf},
 };
 
@@ -93,16 +93,31 @@ impl UpdateStatus {
     }
 }
 
+#[derive(Clone, Deserialize)]
 pub struct DModManConfig {
     download_dir: Option<String>,
     profile: Option<String>,
     api_key: Option<String>,
 }
 impl DModManConfig {
+    pub fn read() -> Option<Self> {
+        let path = Self::path().ok()?;
+        let mut contents = String::new();
+        let mut f = File::open(&path).ok()?;
+        f.read_to_string(&mut contents).ok()?;
+        toml::from_str(&contents).ok()
+    }
+    pub fn download_dir(&self) -> Option<PathBuf> {
+        let ddir = self.download_dir.as_deref()?;
+        let mut ddir = PathBuf::from(ddir);
+
+        if let Some(profile) = self.profile.as_deref() {
+            ddir.push(profile)
+        }
+        Some(ddir)
+    }
     pub fn path() -> Result<PathBuf> {
         let xdg_base = BaseDirectories::with_prefix("dmodman")?;
-        xdg_base
-            .get_config_file("config.toml")
-            .with_context(|| "Cannot find configuration directory for dmodman".to_owned())
+        Ok(xdg_base.get_config_file("config.toml"))
     }
 }
