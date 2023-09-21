@@ -22,7 +22,7 @@ shadow!(build);
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     /// Set output to verbose
-    #[arg(short, long, action = clap::ArgAction::Count, group = "verbosity")]
+    #[arg(short, long, action = clap::ArgAction::Count)]
     verbose: u8,
 
     #[command(subcommand)]
@@ -34,6 +34,7 @@ pub fn main() -> Result<()> {
 
     let settings = Settings::read_config(args.verbose)?;
 
+    // Only allow create-config to be run when no valid settings are found
     if !settings.valid_config() {
         if let Some(cmd @ Subcommands::CreateConfig { .. }) = args.command {
             cmd.execute(&settings)?;

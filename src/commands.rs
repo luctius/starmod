@@ -19,35 +19,6 @@ use self::modlist::{find_mod, gather_mods};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Subcommands {
-    ListDownloads,
-    ExtractDownloads,
-    Extract {
-        name: String,
-    },
-    EditModConfig {
-        name: String,
-        #[arg(short, long)]
-        config_name: Option<String>,
-        #[arg(short, long)]
-        extension: Option<String>,
-    },
-    EditGameConfig {
-        #[arg(short, long)]
-        config_name: Option<String>,
-    },
-    List,
-    Show {
-        name: String,
-    },
-    EnableAll,
-    Enable {
-        name: String,
-        priority: Option<isize>,
-    },
-    DisableAll,
-    Disable {
-        name: String,
-    },
     CreateConfig {
         #[arg(short, long)]
         download_dir: Option<PathBuf>,
@@ -62,20 +33,50 @@ pub enum Subcommands {
         // #[arg(short, long)]
         // find_proton_home_dir: bool,
     },
+    Disable {
+        name: String,
+    },
+    DisableAll,
+    EditGameConfig {
+        #[arg(short, long)]
+        config_name: Option<String>,
+    },
+    EditModConfig {
+        name: String,
+        #[arg(short, long)]
+        config_name: Option<String>,
+        #[arg(short, long)]
+        extension: Option<String>,
+    },
+    Enable {
+        name: String,
+        priority: Option<isize>,
+    },
+    EnableAll,
+    Extract {
+        name: String,
+    },
+    ExtractDownloads,
+    List,
+    ListDownloads,
+    PurgeCache,
+    PurgeConfig,
+    Remove {
+        name: String,
+    },
+    //UpdateConfig
     Run {
         #[arg(short, long)]
         loader: bool,
-    },
-    Remove {
-        name: String,
     },
     SetPriority {
         name: String,
         priority: isize,
     },
+    Show {
+        name: String,
+    },
     ShowConfig,
-    PurgeConfig,
-    PurgeCache,
 }
 impl Subcommands {
     pub fn execute(self, settings: &Settings) -> Result<()> {
@@ -134,7 +135,7 @@ impl Subcommands {
                 config_name,
                 extension,
             } => edit_mod_config_files(&settings, name, config_name, extension),
-            Subcommands::EditGameConfig { config_name } => todo!(),
+            Subcommands::EditGameConfig { config_name: _ } => todo!(),
             Subcommands::PurgeConfig => {
                 enable::disable_all(&settings.cache_dir(), &settings.game_dir())?;
                 settings.purge_config()
@@ -150,7 +151,7 @@ impl Subcommands {
                 }
                 Ok(())
             }
-            Subcommands::Run { loader: bool } => todo!(),
+            Subcommands::Run { loader: _ } => todo!(),
             Subcommands::SetPriority { name, priority } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(mut m) = find_mod(&mod_list, &name) {
