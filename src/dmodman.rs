@@ -1,7 +1,12 @@
-use std::{fs::File, io::BufReader, path::Path};
+use std::{
+    fs::File,
+    io::BufReader,
+    path::{Path, PathBuf},
+};
 
-use anyhow::Error;
+use anyhow::{Error, Result};
 use serde::Deserialize;
+use xdg::BaseDirectories;
 
 pub const DMODMAN_EXTENTION: &'static str = "dmodman";
 
@@ -85,5 +90,19 @@ impl UpdateStatus {
             | Self::OutOfDate(t)
             | Self::IgnoredUntil(t) => *t,
         }
+    }
+}
+
+pub struct DModManConfig {
+    download_dir: Option<String>,
+    profile: Option<String>,
+    api_key: Option<String>,
+}
+impl DModManConfig {
+    pub fn path() -> Result<PathBuf> {
+        let xdg_base = BaseDirectories::with_prefix("dmodman")?;
+        xdg_base
+            .get_config_file("config.toml")
+            .with_context(|| "Cannot find configuration directory for dmodman".to_owned())
     }
 }
