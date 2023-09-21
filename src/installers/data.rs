@@ -1,9 +1,11 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
+use lazy_regex::regex_captures;
 use walkdir::WalkDir;
 
 use crate::{
+    dmodman::{DmodMan, DMODMAN_EXTENTION},
     manifest::{InstallFile, Manifest},
     mod_types::ModType,
 };
@@ -11,14 +13,16 @@ use crate::{
 pub fn create_data_manifest(
     mod_type: ModType,
     cache_dir: &Path,
-    manifest_dir: &Path,
+    mod_dir: &Path,
 ) -> Result<Manifest> {
     if let ModType::DataMod { data_start } = &mod_type {
         let mut files = Vec::new();
         let mut disabled_files = Vec::new();
 
         let mut archive_dir = PathBuf::from(cache_dir);
-        archive_dir.push(manifest_dir);
+        archive_dir.push(mod_dir);
+
+        let dmodman = archive_dir.with_extension(DMODMAN_EXTENTION);
 
         //FIXME TODO Seek for deeper data dir and strip the prefix from destination
         //TODO: check for a data dir further in the file tree
@@ -59,15 +63,24 @@ pub fn create_data_manifest(
             }
         });
 
-        let name = manifest_dir.to_string_lossy().to_string();
-        let name = name
-            .split_once("-")
-            .map(|n| n.0.to_string())
-            .unwrap_or(name);
+        let mut version = None;
+        let mut nexus_id = None;
+        let mut name = mod_dir.to_string_lossy().to_string();
+        dbg!(dmodman.exists());
+        dbg!(dmodman.is_file());
+        dbg!(DmodMan::try_from(dmodman.as_path()));
+        if let Ok(dmodman) = DmodMan::try_from(dmodman.as_path()) {
+            dbg!(&dmodman);
+            nexus_id = Some(dmodman.mod_id());
+            version = dmodman.version();
+            name = dmodman.name();
+        }
 
         Ok(Manifest::new(
-            manifest_dir,
+            mod_dir,
             name,
+            nexus_id,
+            version,
             mod_type,
             files,
             disabled_files,

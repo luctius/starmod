@@ -4,7 +4,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use crate::{decompress::SupportedArchives, manifest::Manifest, mod_types::ModType};
+use crate::{
+    decompress::SupportedArchives, dmodman::DMODMAN_EXTENTION, manifest::Manifest,
+    mod_types::ModType,
+};
 
 use anyhow::Result;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
@@ -79,6 +82,14 @@ fn extract_downloaded_file(
     archive.push(file.clone());
     archive.set_extension("");
 
+    let ext = download_file.extension();
+    let dmodman_file = download_file.with_extension(&format!(
+        "{}.json",
+        ext.map(|s| s.to_str()).flatten().unwrap_or_default()
+    ));
+
+    //TODO use dmodman file to verify if file belongs to our current game.
+
     let mut name = PathBuf::from(file.clone());
     name.set_extension("");
 
@@ -101,7 +112,11 @@ fn extract_downloaded_file(
             }
         }
 
-        println!("{} -> {}", download_file.display(), archive.display());
+        println!(
+            "extracting {} -> {}",
+            download_file.display(),
+            archive.display()
+        );
         archive_type.decompress(&download_file, &archive).unwrap();
 
         // Rename all extracted files to their lower-case counterpart
@@ -109,10 +124,26 @@ fn extract_downloaded_file(
         // not know if their name in the fomod package matches their actual names.
         rename_recursive(&archive)?;
 
+        dbg!(&dmodman_file);
+        if dmodman_file.exists() {
+            let archive_dmodman = archive.with_extension(DMODMAN_EXTENTION);
+
+            println!(
+                "copying dmondman file: {} -> {}",
+                dmodman_file.display(),
+                archive_dmodman.display()
+            );
+            std::fs::copy(&dmodman_file, &archive_dmodman)?;
+            dbg!(&archive_dmodman);
+            dbg!(archive_dmodman.exists());
+            dbg!(archive_dmodman.is_file());
+        }
+
         let mod_type = ModType::detect_mod_type(&cache_dir, &name)?;
         let manifest = mod_type.create_manifest(&cache_dir, &name)?;
         manifest.write_manifest(cache_dir)?;
     }
+
     Ok(())
 }
 

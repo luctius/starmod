@@ -63,14 +63,16 @@ pub fn conflict_list_by_mod(mods: &[Manifest]) -> Result<HashMap<String, Conflic
         list.iter().for_each(|(f, vec)| {
             let mut found_self = false;
 
-            for a in vec.iter() {
-                if a.as_str() == m.name() {
-                    found_self = true;
-                    conflicts.push(f.clone());
-                } else if found_self {
-                    winning.insert(a.to_string());
-                } else {
-                    losing.insert(a.to_string());
+            if m.dest_files().contains(f) {
+                for a in vec.iter() {
+                    if a.as_str() == m.name() {
+                        found_self = true;
+                        conflicts.push(f.clone());
+                    } else if found_self {
+                        winning.insert(a.to_string());
+                    } else {
+                        losing.insert(a.to_string());
+                    }
                 }
             }
         });

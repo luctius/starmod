@@ -3,7 +3,10 @@ mod downloads;
 mod enable;
 mod modlist;
 
-use std::path::{Path, PathBuf};
+use std::{
+    fmt::Display,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use clap::Subcommand;
@@ -20,7 +23,7 @@ use self::modlist::{find_mod, gather_mods};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Subcommands {
-    CreateConfig {
+    UpdateConfig {
         #[arg(short, long)]
         download_dir: Option<PathBuf>,
         #[arg(short, long)]
@@ -71,7 +74,10 @@ pub enum Subcommands {
     Remove {
         name: String,
     },
-    //UpdateConfig
+    // RenameMod {
+    //     old_mod_name: String,
+    //     new_mod_name: String,
+    // },
     Run {
         #[arg(short, long)]
         loader: bool,
@@ -83,6 +89,7 @@ pub enum Subcommands {
     Show {
         name: String,
     },
+    ShowLegenda,
     ShowConfig,
 }
 impl Subcommands {
@@ -128,21 +135,25 @@ impl Subcommands {
                 enable::disable_mod(&settings.cache_dir(), &settings.game_dir(), &name)?;
                 show_mod(&settings.cache_dir(), &name)
             }
-            Subcommands::CreateConfig {
+            Subcommands::UpdateConfig {
                 download_dir,
                 game_dir,
                 cache_dir,
                 proton_dir,
                 user_dir,
                 editor,
-            } => settings.create_config(
-                download_dir,
-                game_dir,
-                cache_dir,
-                proton_dir,
-                user_dir,
-                editor,
-            ),
+            } => {
+                settings.create_config(
+                    download_dir,
+                    game_dir,
+                    cache_dir,
+                    proton_dir,
+                    user_dir,
+                    editor,
+                )?;
+                println!("{}", &settings);
+                Ok(())
+            }
             Subcommands::ShowConfig => {
                 println!("{}", &settings);
                 Ok(())
@@ -169,6 +180,7 @@ impl Subcommands {
                 Ok(())
             }
             Subcommands::Run { loader: _ } => todo!(),
+            Subcommands::ShowLegenda => show_legenda(),
             Subcommands::SetPriority { name, priority } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(mut m) = find_mod(&mod_list, &name) {
@@ -234,13 +246,71 @@ fn edit_mod_config_files(
     Ok(())
 }
 
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum Tag {
+    None,
+    Winner,
+    Loser,
+    CompleteLoser,
+    Conflict,
+    Disabled,
+}
+// impl Display for Tag {
+//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+//         match tag {
+//             Tag::None => ' ',
+//             Tag::Winner => 'w',
+//             Tag::Loser => 'l',
+//             Tag::CompleteLoser => 'L',
+//             Tag::Conflict => 'c',
+//             Tag::Disabled => 'D',
+//         }
+//     }
+// }
+impl From<Tag> for char {
+    fn from(tag: Tag) -> Self {
+        match tag {
+            Tag::None => ' ',
+            Tag::Winner => 'w',
+            Tag::Loser => 'l',
+            Tag::CompleteLoser => 'L',
+            Tag::Conflict => 'c',
+            Tag::Disabled => 'D',
+        }
+    }
+}
+impl From<Tag> for Color {
+    fn from(tag: Tag) -> Self {
+        match tag {
+            Tag::None => Color::White,
+            Tag::Winner => Color::Green,
+            Tag::Loser => Color::Yellow,
+            Tag::CompleteLoser => Color::Red,
+            Tag::Conflict => Color::Magenta,
+            Tag::Disabled => Color::DarkGrey,
+        }
+    }
+}
+impl From<(bool, bool)> for Tag {
+    fn from((loser, winner): (bool, bool)) -> Self {
+        match (loser, winner) {
+            (false, false) => Tag::None,
+            (false, true) => Tag::Winner,
+            (true, false) => Tag::Loser,
+            (true, true) => Tag::Conflict,
+        }
+    }
+}
+
 pub fn list_mods(cache_dir: &Path) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
+    let conflict_list = conflict_list_by_mod(&mod_list)?;
 
-    let mut table = create_table(vec!["Index", "Name", "Priority", "Status", "Mod Type"]);
+    let mut table = create_table(vec![
+        "Index", "Name", "Priority", "Status", "Version", "Nexus Id", "Mod Type",
+    ]);
 
     for (idx, manifest) in mod_list.iter().enumerate() {
-        let conflict_list = conflict_list_by_mod(&mod_list)?;
         let is_loser = conflict_list
             .get(&manifest.name().to_string())
             .map(|c| !c.losing_to().is_empty())
@@ -250,14 +320,10 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
             .map(|c| !c.winning_over().is_empty())
             .unwrap_or(false);
 
-        let color = match (is_loser, is_winner) {
-            (false, false) => Color::White,
-            (false, true) => Color::Green,
-            (true, false) => Color::Yellow,
-            (true, true) => Color::Blue,
-        };
+        let tag = Tag::from((is_loser, is_winner));
+
         // Detect if we all files of this manifest are overwritten by other mods
-        let color = if is_loser && !is_winner {
+        let tag = if is_loser && !is_winner {
             let mut file_not_lost = false;
             let conflict_list = conflict_list_by_file(&mod_list)?;
 
@@ -274,24 +340,34 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
             }
 
             if !file_not_lost {
-                Color::Red
+                Tag::CompleteLoser
             } else {
-                color
+                tag
             }
         } else {
-            color
+            tag
         };
-        let color = if manifest.mod_state().is_enabled() {
-            color
+        let tag = if manifest.mod_state().is_enabled() {
+            tag
         } else {
-            Color::DarkGrey
+            Tag::Disabled
         };
+
+        let color = Color::from(tag);
 
         table.add_row(vec![
             Cell::new(idx.to_string()).fg(color),
             Cell::new(manifest.name().to_string()).fg(color),
             Cell::new(manifest.priority().to_string()).fg(color),
             Cell::new(manifest.mod_state().to_string()).fg(color),
+            Cell::new(manifest.version().unwrap_or("<None>").to_string()).fg(color),
+            Cell::new(
+                manifest
+                    .nexus_id()
+                    .map(|nid| nid.to_string())
+                    .unwrap_or("<None>".to_owned()),
+            )
+            .fg(color),
             Cell::new(manifest.mod_type().to_string()).fg(color),
         ]);
     }
@@ -316,12 +392,19 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
     let conflict_list_file = conflict_list_by_file(&mod_list)?;
     let conflict_list_mod = conflict_list_by_mod(&mod_list)?;
 
-    let mut table = create_table(vec!["Name", "Priority", "Status", "Mod Type"]);
+    let mut table = create_table(vec![
+        "Name", "Priority", "Status", "Mod Type", "Version", "Nexus Id",
+    ]);
     table.add_row(vec![
         manifest.name().to_string(),
         manifest.priority().to_string(),
         manifest.mod_state().to_string(),
         manifest.mod_type().to_string(),
+        manifest.version().unwrap_or("<None>").to_string(),
+        manifest
+            .nexus_id()
+            .map(|nid| nid.to_string())
+            .unwrap_or("<None>".to_owned()),
     ]);
 
     println!("{table}");
@@ -333,12 +416,12 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
             "This mod is overwritten by",
         ]);
 
-        let mut found_self = false;
         for f in conflict.conflict_files() {
             let mut winners = Vec::new();
             let mut losers = Vec::new();
 
             if let Some(contenders) = conflict_list_file.get(f) {
+                let mut found_self = false;
                 for contender in contenders {
                     if contender == manifest.name() {
                         found_self = true;
@@ -374,5 +457,54 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
         println!("{table}");
     }
 
+    Ok(())
+}
+
+pub fn show_legenda() -> Result<()> {
+    let mut table = create_table(vec!["Color", "Meaning"]);
+
+    let tag = Tag::None;
+    let (color, chr) = (Color::from(tag), char::from(tag));
+    table.add_row(vec![
+        Cell::new(chr.to_string()).fg(color),
+        Cell::new("Conflict winner for some files, conflict loser for other files.").fg(color),
+    ]);
+
+    let tag = Tag::Winner;
+    let (color, chr) = (Color::from(tag), char::from(tag));
+    table.add_row(vec![
+        Cell::new(chr.to_string()).fg(color),
+        Cell::new("Complete conflict winner").fg(color),
+    ]);
+
+    let tag = Tag::Loser;
+    let (color, chr) = (Color::from(tag), char::from(tag));
+    table.add_row(vec![
+        Cell::new(chr.to_string()).fg(color),
+        Cell::new("Conflict loser").fg(color),
+    ]);
+
+    let tag = Tag::CompleteLoser;
+    let (color, chr) = (Color::from(tag), char::from(tag));
+    table.add_row(vec![
+        Cell::new(chr.to_string()).fg(color),
+        Cell::new("Complete conflict loser; loses ALL files to other mods").fg(color),
+    ]);
+
+    let tag = Tag::Conflict;
+    let (color, chr) = (Color::from(tag), char::from(tag));
+    table.add_row(vec![
+        Cell::new(chr.to_string()).fg(color),
+        Cell::new("Conflict winner for some files, conflict loser for other files.").fg(color),
+    ]);
+
+    let tag = Tag::Disabled;
+    let (color, chr) = (Color::from(tag), char::from(tag));
+    table.add_row(vec![
+        Cell::new(chr.to_string()).fg(color),
+        Cell::new("Mod is disabled.").fg(color),
+    ]);
+
+    println!("{table}");
     Ok(())
 }

@@ -5,6 +5,7 @@ use clap::Parser;
 mod commands;
 mod decompress;
 use commands::Subcommands;
+mod dmodman;
 mod game;
 mod installers;
 mod manifest;
@@ -36,7 +37,7 @@ pub fn main() -> Result<()> {
 
     // Only allow create-config to be run when no valid settings are found
     if !settings.valid_config() {
-        if let Some(cmd @ Subcommands::CreateConfig { .. }) = args.command {
+        if let Some(cmd @ Subcommands::UpdateConfig { .. }) = args.command {
             cmd.execute(&settings)?;
         } else {
             return Err(SettingErrors::ConfigNotFound(settings.cmd_name().to_owned()).into());

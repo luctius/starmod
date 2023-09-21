@@ -5,6 +5,7 @@ use encoding_rs_io::DecodeReaderBytes;
 
 use anyhow::Result;
 use fomod::{Config, Dependency, DependencyOperator, FlagDependency, Info};
+use lazy_regex::regex_captures;
 use read_stdin::prompt_until_ok;
 use std::{
     collections::HashSet,
@@ -15,6 +16,7 @@ use std::{
 use walkdir::WalkDir;
 
 use crate::{
+    dmodman::{DmodMan, DMODMAN_EXTENTION},
     installers::{
         stdin::{Input, InputWithDone},
         InstallerError,
@@ -28,14 +30,16 @@ use super::DATA_DIR_NAME;
 pub fn create_fomod_manifest(
     mod_type: ModType,
     cache_dir: &Path,
-    manifest_dir: &Path,
+    mod_dir: &Path,
 ) -> Result<Manifest> {
     let mut files = Vec::new();
     let mut archive_dir = PathBuf::from(cache_dir);
-    archive_dir.push(manifest_dir);
+    archive_dir.push(mod_dir);
 
     let mut config = archive_dir.clone();
     config.push(FOMOD_MODCONFIG_FILE);
+
+    let dmodman = archive_dir.with_extension(DMODMAN_EXTENTION);
 
     let info = {
         let mut info = archive_dir.clone();
@@ -61,12 +65,15 @@ pub fn create_fomod_manifest(
         Config::try_from(contents.as_str())?
     };
 
-    let name = info.name.unwrap_or_else(|| {
-        let name = manifest_dir.to_string_lossy().to_string();
-        name.split_once("-")
-            .map(|n| n.0.to_string())
-            .unwrap_or(name)
-    });
+    let mut name = info.name;
+    let mut version = info.version;
+    let mut nexus_id = None;
+    if let Ok(dmodman) = DmodMan::try_from(dmodman.as_path()) {
+        nexus_id = Some(dmodman.mod_id());
+        version = dmodman.version();
+        name.get_or_insert_with(|| dmodman.name());
+    }
+    let name = name.unwrap_or_else(|| mod_dir.to_string_lossy().to_string());
 
     //FIXME TODO Dependencies
 
@@ -146,8 +153,10 @@ pub fn create_fomod_manifest(
     }
 
     Ok(Manifest::new(
-        manifest_dir,
+        mod_dir,
         name,
+        nexus_id,
+        version,
         mod_type,
         files,
         Vec::new(),

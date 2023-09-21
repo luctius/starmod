@@ -1,6 +1,6 @@
 use std::{
     fmt::Display,
-    fs::{read_link, remove_dir, remove_dir_all, remove_file, DirBuilder, File},
+    fs::{read_link, remove_dir, remove_dir_all, remove_file, rename, DirBuilder, File},
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
@@ -9,11 +9,11 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
-use crate::{installers::DATA_DIR_NAME, mod_types::ModType};
+use crate::{dmodman::DMODMAN_EXTENTION, installers::DATA_DIR_NAME, mod_types::ModType};
 
 //TODO: replace PathBuf with something that is ressilient to deserialisation of non-utf8 characters
 
-const MANIFEST_EXTENTION: &'static str = "ron";
+pub const MANIFEST_EXTENTION: &'static str = "ron";
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ModState {
@@ -76,6 +76,8 @@ impl From<&Path> for InstallFile {
 pub struct Manifest {
     manifest_dir: PathBuf,
     name: String,
+    version: Option<String>,
+    nexus_id: Option<u32>,
     mod_type: ModType,
     mod_state: ModState,
     files: Vec<InstallFile>,
@@ -86,6 +88,8 @@ impl Manifest {
     pub fn new(
         manifest_dir: &Path,
         name: String,
+        nexus_id: Option<u32>,
+        version: Option<String>,
         mod_type: ModType,
         files: Vec<InstallFile>,
         disabled_files: Vec<InstallFile>,
@@ -93,6 +97,8 @@ impl Manifest {
         let s = Self {
             manifest_dir: manifest_dir.to_path_buf(),
             name,
+            nexus_id,
+            version,
             mod_type,
             files,
             disabled_files,
@@ -135,6 +141,8 @@ impl Manifest {
         remove_dir_all(&path)?;
         path.set_extension(MANIFEST_EXTENTION);
         remove_file(&path)?;
+        path.set_extension(DMODMAN_EXTENTION);
+        remove_file(&path)?;
         Ok(())
     }
     pub fn is_valid(&self) -> bool {
@@ -146,6 +154,12 @@ impl Manifest {
     }
     pub fn name(&self) -> &str {
         &self.name
+    }
+    pub fn nexus_id(&self) -> Option<u32> {
+        self.nexus_id
+    }
+    pub fn version(&self) -> Option<&str> {
+        self.version.as_deref()
     }
     pub fn mod_type(&self) -> &ModType {
         &self.mod_type
@@ -194,9 +208,22 @@ impl Manifest {
                     remove_file(&destination)?;
                     //TODO verbose println!("removed {} -> {}", destination.display(), target.display());
                 } else {
+                    let bkp_destination = destination.with_file_name(format!(
+                        "{}.starmod_bkp",
+                        destination
+                            .extension()
+                            .map(|s| s.to_str())
+                            .flatten()
+                            .unwrap_or_default()
+                    ));
                     //TODO: can we handle foreign files better than this?
-                    eprintln!("Not removing forein file: {}", target.display());
-                    continue;
+                    // eprintln!("Not removing foreign file: {}", target.display());
+                    println!(
+                        "renaming foreign file from {} -> {}",
+                        destination.display(),
+                        bkp_destination.display()
+                    );
+                    rename(&destination, bkp_destination)?;
                 }
             }
 

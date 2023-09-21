@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use comfy_table::{presets::NOTHING, Cell, Color, ContentArrangement, Table};
+use comfy_table::{presets::NOTHING, ContentArrangement, Table};
 use serde::{Deserialize, Serialize};
 use std::{
     env,
@@ -20,14 +20,14 @@ const EDITOR_ENV: &'static str = "EDITOR";
 pub enum SettingErrors {
     #[error("The app is run with an unknown name ({0}); Please use on of {1}.")]
     WrongAppName(String, String),
-    #[error("No valid config file could be found; Please run '{0} create-config' first.")]
+    #[error("No valid config file could be found; Please run '{0} update-config' first.")]
     ConfigNotFound(String),
-    #[error("The game directory for {0} cannot be found, Please run '{1} create-config' and provide manually.")]
+    #[error("The game directory for {0} cannot be found, Please run '{1} update-config' and provide manually.")]
     NoGameDirFound(String, String),
-    #[error("A download directory for cannot be found, Please run '{0} create-config' and provide manually.")]
+    #[error("A download directory for cannot be found, Please run '{0} update-config' and provide manually.")]
     NoDownloadDirFound(String),
     #[error(
-        "The cache directory cannot be found, Please run '{0} create-config' and provide manually."
+        "The cache directory cannot be found, Please run '{0} update-config' and provide manually."
     )]
     NoCacheDirFound(String),
 }

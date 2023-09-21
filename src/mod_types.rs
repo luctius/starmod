@@ -28,6 +28,8 @@ pub enum ModType {
     FoMod,
     //Goes into the root dir
     Plugin,
+    //Goes into the root dir
+    Loader,
 }
 impl ModType {
     pub fn create_manifest(self, cache_dir: &Path, name: &Path) -> Result<Manifest> {
@@ -35,11 +37,12 @@ impl ModType {
             Self::DataMod { .. } => create_data_manifest(self, cache_dir, name),
             Self::FoMod => create_fomod_manifest(self, cache_dir, name),
             Self::Plugin => create_plugin_manifest(self, cache_dir, name),
+            Self::Loader => create_plugin_manifest(self, cache_dir, name),
         }
     }
     pub fn prefix_to_strip(&self) -> PathBuf {
         match self {
-            Self::FoMod | Self::Plugin => PathBuf::new(),
+            Self::FoMod | Self::Plugin | Self::Loader => PathBuf::new(),
             Self::DataMod { data_start } => data_start.to_owned(),
         }
     }
@@ -79,7 +82,25 @@ impl ModType {
 
         let walker = WalkDir::new(&archive_dir)
             .min_depth(1)
-            .max_depth(3)
+            .max_depth(2)
+            .follow_links(false)
+            .same_file_system(true)
+            .contents_first(true);
+
+        for entry in walker {
+            let entry = entry?;
+            let entry_path = entry.path();
+
+            if let Some(ext) = entry_path.extension() {
+                if ext == "exe" {
+                    return Ok(Self::Loader);
+                }
+            }
+        }
+
+        let walker = WalkDir::new(&archive_dir)
+            .min_depth(1)
+            .max_depth(4)
             .follow_links(false)
             .same_file_system(true)
             .contents_first(true);
@@ -96,10 +117,9 @@ impl ModType {
         }
 
         let mut data_path = None;
-
         let walker = WalkDir::new(&archive_dir)
             .min_depth(1)
-            .max_depth(4)
+            .max_depth(1)
             .follow_links(false)
             .same_file_system(true)
             .contents_first(true);
@@ -118,6 +138,33 @@ impl ModType {
                 }
             }
         }
+
+        if data_path.is_none() {
+            let walker = WalkDir::new(&archive_dir)
+                .min_depth(1)
+                .max_depth(4)
+                .follow_links(false)
+                .same_file_system(true)
+                .contents_first(true);
+
+            for entry in walker {
+                let entry = entry?;
+                let entry_path = entry.path();
+                if entry_path.is_dir()
+                    && entry.path().file_name().unwrap() == OsString::from("data")
+                {
+                    if data_path.is_none() {
+                        let entry_path = entry_path.to_path_buf();
+                        data_path = Some(entry_path.strip_prefix(&archive_dir)?.to_path_buf());
+                    } else {
+                        Err(InstallerError::MultipleDataDirectories(
+                            name.to_string_lossy().to_string(),
+                        ))?;
+                    }
+                }
+            }
+        }
+
         Ok(Self::DataMod {
             data_start: data_path.unwrap_or_else(|| PathBuf::from("")),
         })
@@ -129,6 +176,7 @@ impl Display for ModType {
             Self::DataMod { .. } => f.write_str("Data"),
             Self::FoMod => f.write_str("FoMod"),
             Self::Plugin => f.write_str("Plugin"),
+            Self::Loader => f.write_str("Loader"),
         }
     }
 }

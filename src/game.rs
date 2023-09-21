@@ -30,6 +30,11 @@ impl Game {
             Self::StarMod => "Starfield",
         }
     }
+    pub fn nexus_game_name(&self) -> &'static str {
+        match self {
+            Self::StarMod => "starfield",
+        }
+    }
     pub fn create_from_name(app_name: &str) -> Result<Self> {
         for (i, n) in Self::allowed_names().iter().enumerate() {
             if *n == app_name.to_lowercase().as_str() {
