@@ -8,13 +8,17 @@ use crate::{
     mod_types::ModType,
 };
 
-pub fn create_data_manifest(mod_type: ModType, cache_dir: &Path, name: &Path) -> Result<Manifest> {
+pub fn create_data_manifest(
+    mod_type: ModType,
+    cache_dir: &Path,
+    manifest_dir: &Path,
+) -> Result<Manifest> {
     if let ModType::DataMod { data_start } = &mod_type {
         let mut files = Vec::new();
         let mut disabled_files = Vec::new();
 
         let mut archive_dir = PathBuf::from(cache_dir);
-        archive_dir.push(name);
+        archive_dir.push(manifest_dir);
 
         //FIXME TODO Seek for deeper data dir and strip the prefix from destination
         //TODO: check for a data dir further in the file tree
@@ -55,9 +59,19 @@ pub fn create_data_manifest(mod_type: ModType, cache_dir: &Path, name: &Path) ->
             }
         });
 
-        let name = name.to_string_lossy().to_string();
+        let name = manifest_dir.to_string_lossy().to_string();
+        let name = name
+            .split_once("-")
+            .map(|n| n.0.to_string())
+            .unwrap_or(name);
 
-        Ok(Manifest::new(name, mod_type, files, disabled_files))
+        Ok(Manifest::new(
+            manifest_dir,
+            name,
+            mod_type,
+            files,
+            disabled_files,
+        ))
     } else {
         panic!("no data mod");
     }

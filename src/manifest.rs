@@ -1,6 +1,6 @@
 use std::{
     fmt::Display,
-    fs::{read_link, remove_dir, remove_file, DirBuilder, File},
+    fs::{read_link, remove_dir, remove_dir_all, remove_file, DirBuilder, File},
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
@@ -13,7 +13,7 @@ use crate::{installers::DATA_DIR_NAME, mod_types::ModType};
 
 //TODO: replace PathBuf with something that is ressilient to deserialisation of non-utf8 characters
 
-const MANIFEST_EXTENTION_NAME: &'static str = "ron";
+const MANIFEST_EXTENTION: &'static str = "ron";
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ModState {
@@ -74,6 +74,7 @@ impl From<&Path> for InstallFile {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Manifest {
+    manifest_dir: PathBuf,
     name: String,
     mod_type: ModType,
     mod_state: ModState,
@@ -82,14 +83,15 @@ pub struct Manifest {
     priority: isize,
 }
 impl Manifest {
-    //TODO: should probably move this to a decicated installer function
     pub fn new(
+        manifest_dir: &Path,
         name: String,
         mod_type: ModType,
         files: Vec<InstallFile>,
         disabled_files: Vec<InstallFile>,
     ) -> Self {
         let s = Self {
+            manifest_dir: manifest_dir.to_path_buf(),
             name,
             mod_type,
             files,
@@ -97,7 +99,6 @@ impl Manifest {
             mod_state: ModState::Disabled,
             priority: 0,
         };
-        // println!("Creating Manifest: {:?}", s);
         s
     }
     pub fn set_priority(&mut self, priority: isize) {
@@ -106,7 +107,7 @@ impl Manifest {
     pub fn from_file(cache_dir: &Path, archive: &Path) -> Result<Self> {
         let mut manifest_file = PathBuf::from(cache_dir);
         manifest_file.push(archive);
-        manifest_file.set_extension(MANIFEST_EXTENTION_NAME);
+        manifest_file.set_extension(MANIFEST_EXTENTION);
 
         let file = File::open(manifest_file)?;
         Self::try_from(file)
@@ -114,8 +115,8 @@ impl Manifest {
 
     pub fn write_manifest(&self, cache_dir: &Path) -> Result<()> {
         let mut path = PathBuf::from(cache_dir);
-        path.push(&self.name);
-        path.set_extension(MANIFEST_EXTENTION_NAME);
+        path.push(&self.manifest_dir);
+        path.set_extension(MANIFEST_EXTENTION);
 
         if path.exists() {
             remove_file(&path)?;
@@ -128,16 +129,23 @@ impl Manifest {
         file.write_all(serialized.as_bytes())?;
         Ok(())
     }
+    pub fn remove(&self, cache_dir: &Path) -> Result<()> {
+        let mut path = PathBuf::from(cache_dir);
+        path.push(&self.manifest_dir);
+        remove_dir_all(&path)?;
+        path.set_extension(MANIFEST_EXTENTION);
+        remove_file(&path)?;
+        Ok(())
+    }
     pub fn is_valid(&self) -> bool {
         //TODO: checks to validate the manifest file
         true
     }
-    // pub fn archive_name(&self) -> &str {
-    //     &self.name
-    // }
+    pub fn manifest_dir(&self) -> &Path {
+        &self.manifest_dir
+    }
     pub fn name(&self) -> &str {
-        //TODO Allow for names set by fomod
-        &self.name.split_once("-").unwrap().0
+        &self.name
     }
     pub fn mod_type(&self) -> &ModType {
         &self.mod_type
@@ -271,7 +279,7 @@ impl Manifest {
         for f in &self.files {
             let origin = f.source.as_path();
             let origin = {
-                let mut o = PathBuf::from(&self.name);
+                let mut o = self.manifest_dir.to_path_buf();
                 o.push(origin);
                 o
             };
@@ -281,6 +289,26 @@ impl Manifest {
     }
     pub fn priority(&self) -> isize {
         self.priority
+    }
+    pub fn find_config_files(&self, ext: Option<&str>) -> Vec<PathBuf> {
+        let mut config_files = Vec::new();
+
+        let ext_vec = if let Some(ext) = ext {
+            vec![ext]
+        } else {
+            vec!["ini", "json", "yaml", "xml"]
+        };
+
+        for f in self.origin_files() {
+            if let Some(file_ext) = f.extension() {
+                let file_ext = file_ext.to_string_lossy().to_string();
+
+                if ext_vec.contains(&file_ext.as_str()) {
+                    config_files.push(f);
+                }
+            }
+        }
+        config_files
     }
 }
 impl TryFrom<File> for Manifest {

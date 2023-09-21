@@ -11,13 +11,13 @@ use crate::{
 pub fn create_plugin_manifest(
     mod_type: ModType,
     cache_dir: &Path,
-    name: &Path,
+    manifest_dir: &Path,
 ) -> Result<Manifest> {
     let mut files = Vec::new();
     let mut disabled_files = Vec::new();
 
     let mut archive_dir = PathBuf::from(cache_dir);
-    archive_dir.push(name);
+    archive_dir.push(manifest_dir);
 
     let walker = WalkDir::new(&archive_dir)
         .min_depth(1)
@@ -51,7 +51,17 @@ pub fn create_plugin_manifest(
         }
     });
 
-    let name = name.to_string_lossy().to_string();
+    let name = manifest_dir.to_string_lossy().to_string();
+    let name = name
+        .split_once("-")
+        .map(|n| n.0.to_string())
+        .unwrap_or(name);
 
-    Ok(Manifest::new(name, mod_type, files, disabled_files))
+    Ok(Manifest::new(
+        manifest_dir,
+        name,
+        mod_type,
+        files,
+        disabled_files,
+    ))
 }

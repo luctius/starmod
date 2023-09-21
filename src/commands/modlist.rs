@@ -5,12 +5,8 @@ use std::{
 };
 
 use anyhow::Result;
-use comfy_table::{presets::NOTHING, Cell, Color, ContentArrangement, Table};
 
-use crate::{
-    commands::conflict::{conflict_list_by_file, conflict_list_by_mod},
-    manifest::Manifest,
-};
+use crate::manifest::Manifest;
 
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
@@ -47,106 +43,6 @@ pub fn gather_mods(cache_dir: &Path) -> Result<Vec<Manifest>> {
     });
 
     Ok(manifest_list)
-}
-
-pub fn list_mods(cache_dir: &Path) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
-
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_width(120)
-        .set_header(vec!["Index", "Name", "Priority", "Status", "Mod Type"]);
-
-    for (idx, manifest) in mod_list.iter().enumerate() {
-        let conflict_list = conflict_list_by_mod(&mod_list)?;
-        let is_loser = conflict_list
-            .get(&manifest.name().to_string())
-            .map(|c| !c.losing_to().is_empty())
-            .unwrap_or(false);
-        let is_winner = conflict_list
-            .get(&manifest.name().to_string())
-            .map(|c| !c.winning_over().is_empty())
-            .unwrap_or(false);
-
-        let color = match (is_loser, is_winner) {
-            (false, false) => Color::White,
-            (false, true) => Color::Green,
-            (true, false) => Color::Red,
-            (true, true) => Color::Blue,
-        };
-        let color = if manifest.mod_state().is_enabled() {
-            color
-        } else {
-            Color::DarkGrey
-        };
-
-        table.add_row(vec![
-            Cell::new(idx.to_string()).fg(color),
-            Cell::new(manifest.name().to_string()).fg(color),
-            Cell::new(manifest.priority().to_string()).fg(color),
-            Cell::new(manifest.mod_state().to_string()).fg(color),
-            Cell::new(manifest.mod_type().to_string()).fg(color),
-        ]);
-    }
-
-    println!("{table}");
-
-    Ok(())
-}
-
-pub fn show_mod(cache_dir: &Path, mod_name: &str) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
-    if let Some(m) = find_mod(&mod_list, mod_name) {
-        show_mod_status(&m, &mod_list)?;
-    } else {
-        println!("No mod found by that name: {}", mod_name);
-    }
-
-    Ok(())
-}
-
-//TODO: fancier printing
-//TODO move this to manifest Display
-pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()> {
-    let conflict_list_file = conflict_list_by_file(&mod_list)?;
-    let conflict_list_mod = conflict_list_by_mod(&mod_list)?;
-
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_width(120)
-        .set_header(vec!["Name", "Priority", "Status", "Mod Type"])
-        .add_row(vec![
-            manifest.name().to_string(),
-            manifest.priority().to_string(),
-            manifest.mod_state().to_string(),
-            manifest.mod_type().to_string(),
-        ]);
-
-    println!("{table}");
-
-    if let Some(conflict) = conflict_list_mod.get(&manifest.name().to_string()) {
-        let mut table = Table::new();
-        table
-            .load_preset(NOTHING)
-            .set_content_arrangement(ContentArrangement::Dynamic)
-            .set_width(120)
-            .set_header(vec!["Conflicting File", "Contenders"]);
-
-        for f in conflict.conflict_files() {
-            if let Some(contenders) = conflict_list_file.get(f) {
-                table.add_row(vec![f.clone(), format!("{:?}", contenders)]);
-            }
-        }
-
-        println!("");
-        println!("{table}");
-    }
-
-    Ok(())
 }
 
 pub fn find_mod(mod_list: &[Manifest], mod_name: &str) -> Option<Manifest> {

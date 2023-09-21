@@ -29,6 +29,7 @@ serde = { version = "1", features = ["derive"] }
 fomod = { git = "https://github.com/luctius/fomod.git", branch = "main"}
 walkdir = "2.4.0"
 xdg = "2.5.2"
+dirs = "5.0.1"  # TODO: either dirs or xdg is superflous, choose one.
 fuzzy-matcher = "0.3.7"
 comfy-table = "7.0.1"
 encoding_rs_io = "0.1.7"

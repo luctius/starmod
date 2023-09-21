@@ -5,6 +5,7 @@ use clap::Parser;
 mod commands;
 mod decompress;
 use commands::Subcommands;
+mod game;
 mod installers;
 mod manifest;
 mod mod_types;
@@ -12,9 +13,9 @@ mod settings;
 
 use settings::Settings;
 use shadow_rs::shadow;
-shadow!(build);
 
-const APP_NAMES: [&'static str; 1] = ["starmod"];
+use crate::settings::SettingErrors;
+shadow!(build);
 
 /// Simple Starfield Modding Application
 #[derive(Parser, Debug)]
@@ -31,16 +32,13 @@ pub struct Args {
 pub fn main() -> Result<()> {
     let args = Args::parse();
 
-    let settings = Settings::read_config()?;
+    let settings = Settings::read_config(args.verbose)?;
 
     if !settings.valid_config() {
         if let Some(cmd @ Subcommands::CreateConfig { .. }) = args.command {
             cmd.execute(&settings)?;
         } else {
-            println!(
-                "Not valid config file found; Please run {} create-config first.",
-                settings.cmd_name()
-            );
+            return Err(SettingErrors::ConfigNotFound(settings.cmd_name().to_owned()).into());
         }
     } else {
         let cmd = args.command.unwrap_or(Subcommands::List);

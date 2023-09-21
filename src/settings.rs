@@ -1,26 +1,51 @@
 use anyhow::{Context, Result};
 use serde::{Deserialize, Serialize};
 use std::{
+    env,
     fmt::Display,
     fs::File,
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
+use thiserror::Error;
 use xdg::BaseDirectories;
 
-use crate::APP_NAMES;
+use crate::game::Game;
+
+const EDITOR_ENV: &'static str = "EDITOR";
+
+#[derive(Error, Debug)]
+pub enum SettingErrors {
+    #[error("the app is run with an unknown name ({0}), use on of {1}.")]
+    WrongAppName(String, String),
+    #[error("no valid config file could be found; Please run '{0} create-config' first.")]
+    ConfigNotFound(String),
+    #[error("game directory for {0} cannot be found, Please run '{1} create-config' and provide manually.")]
+    NoGameDirFound(String, String),
+    #[error("download directory for cannot be found, Please run '{0} create-config' and provide manually.")]
+    NoDownloadDirFound(String),
+    #[error(
+        "cache directory cannot be found, Please run '{0} create-config' and provide manually."
+    )]
+    NoCacheDirFound(String),
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Settings {
+    #[serde(skip_serializing)]
+    game: Game,
     #[serde(skip_serializing, default)]
-    name: String,
+    verbosity: u8,
     config_path: PathBuf,
     download_dir: PathBuf,
     cache_dir: PathBuf,
     game_dir: PathBuf,
+    proton_dir: Option<PathBuf>,
+    compat_dir: Option<PathBuf>,
+    editor: Option<String>,
 }
 impl Settings {
-    fn create() -> Result<Self> {
+    fn create(verbosity: u8) -> Result<Self> {
         //Extract cmd used to run this application
         let name = PathBuf::from(std::env::args().nth(0).unwrap())
             .file_name()
@@ -28,28 +53,32 @@ impl Settings {
             .to_string_lossy()
             .to_string();
 
-        if !APP_NAMES.iter().any(|&n| n == &name) {
-            panic!(
-                "This command cannot be run as {}, use one of {:?}",
-                name, APP_NAMES
-            );
-        }
+        let game = Game::create_from_name(name.as_str())?;
 
         let xdg_base = BaseDirectories::with_prefix(&name)?;
         let config_path = xdg_base
             .place_config_file("config.ron")
             .with_context(|| format!("Cannot create configuration directory for {}", name))?;
 
-        let cache_dir = xdg_base
-            .create_cache_directory("")
-            .with_context(|| format!("Cannot create cache directory for {}", name))?;
+        let download_dir = dirs::download_dir().unwrap_or_default();
+
+        let cache_dir = xdg_base.create_cache_directory("").unwrap_or_default();
+
+        let editor = env::vars().find_map(|(key, val)| (key == EDITOR_ENV).then(|| val));
+
+        let proton_dir = None;
+        let compat_dir = None;
 
         Ok(Self {
-            name,
+            game,
+            verbosity,
             config_path,
-            download_dir: PathBuf::from(""),
+            download_dir,
             cache_dir,
             game_dir: PathBuf::from(""),
+            editor,
+            proton_dir,
+            compat_dir,
         })
     }
     pub fn valid_config(&self) -> bool {
@@ -63,7 +92,7 @@ impl Settings {
             && self.game_dir.is_dir()
     }
     pub fn cmd_name(&self) -> &str {
-        &self.name
+        self.game.name()
     }
     pub fn download_dir(&self) -> &Path {
         &self.download_dir
@@ -74,11 +103,15 @@ impl Settings {
     pub fn game_dir(&self) -> &Path {
         &self.game_dir
     }
-    pub fn read_config() -> Result<Self> {
-        let settings = Self::create()?;
+    pub fn editor(&self) -> Option<&str> {
+        self.editor.as_deref()
+    }
+    pub fn read_config(verbosity: u8) -> Result<Self> {
+        let settings = Self::create(verbosity)?;
         if let Ok(config) = File::open(&settings.config_path) {
             let mut read_settings = Self::try_from(config)?;
-            read_settings.name = settings.name;
+            read_settings.game = settings.game;
+            read_settings.verbosity = verbosity;
             Ok(read_settings)
         } else {
             Ok(settings)
@@ -87,25 +120,30 @@ impl Settings {
     //TODO option to fetch download dir from dmodman's config
     pub fn create_config(
         &self,
-        download_dir: PathBuf,
-        game_dir: PathBuf,
+        download_dir: Option<PathBuf>,
+        game_dir: Option<PathBuf>,
         cache_dir: Option<PathBuf>,
     ) -> Result<()> {
         let mut settings = self.clone();
 
         let cache_dir = cache_dir.unwrap_or(settings.cache_dir);
-
-        download_dir
-            .read_dir()
-            .with_context(|| format!("Failed to read from {}", download_dir.display()))?;
-
-        game_dir
-            .read_dir()
-            .with_context(|| format!("Failed to read from {}", game_dir.display()))?;
+        let game_dir = game_dir.unwrap_or(settings.game_dir);
+        let download_dir = download_dir.unwrap_or(settings.download_dir);
 
         cache_dir
             .read_dir()
-            .with_context(|| format!("Failed to read from {}", cache_dir.display()))?;
+            .map_err(|_| SettingErrors::NoCacheDirFound(self.game.name().to_owned()))?;
+
+        download_dir
+            .read_dir()
+            .map_err(|_| SettingErrors::NoDownloadDirFound(self.game.name().to_owned()))?;
+
+        game_dir.read_dir().map_err(|_| {
+            SettingErrors::NoGameDirFound(
+                self.game.game_name().to_owned(),
+                self.game.name().to_owned(),
+            )
+        })?;
 
         settings.download_dir = download_dir;
         settings.game_dir = game_dir;
