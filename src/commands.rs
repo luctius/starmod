@@ -124,11 +124,7 @@ impl Subcommands {
             }
             Subcommands::Enable { name, priority } => {
                 enable::enable_mod(&settings.cache_dir(), &settings.game_dir(), &name, priority)?;
-                if priority.is_none() {
-                    show_mod(&settings.cache_dir(), &name)
-                } else {
-                    list_mods(&settings.cache_dir())
-                }
+                list_mods(&settings.cache_dir())
             }
             Subcommands::DisableAll => {
                 enable::disable_all(&settings.cache_dir(), &settings.game_dir())?;
@@ -244,6 +240,8 @@ fn run_game(settings: &Settings, loader: bool) -> Result<()> {
                 } else {
                     game_exe.push(settings.game().loader_name());
                 }
+
+                println!("running 'STEAM_COMPAT_DATA_PATH={} STEAM_COMPAT_CLIENT_INSTALL_PATH={} {} run {}'", compat_dir.display(), steam_dir.display(), proton_exe.display(), game_exe.display());
 
                 std::process::Command::new(proton_exe)
                     .arg("run")

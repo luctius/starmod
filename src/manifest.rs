@@ -57,7 +57,7 @@ impl InstallFile {
     pub fn new(source: PathBuf, destination: String) -> Self {
         Self {
             source,
-            destination: dbg!(format!(
+            destination: format!(
                 "Data/{}",
                 destination
                     .as_str()
@@ -65,7 +65,7 @@ impl InstallFile {
                     .unwrap_or(destination.as_str())
                     .replace("//", "/")
                     .to_lowercase()
-            )),
+            ),
         }
     }
 }
@@ -76,13 +76,13 @@ impl From<PathBuf> for InstallFile {
 }
 impl From<&Path> for InstallFile {
     fn from(p: &Path) -> Self {
-        let destination = dbg!(format!(
+        let destination = format!(
             "Data/{}",
             p.strip_prefix("data")
                 .unwrap_or(p)
                 .to_string_lossy()
                 .replace("//", "/")
-        ));
+        );
 
         Self {
             source: p.to_path_buf(),
@@ -252,7 +252,7 @@ impl Manifest {
 
             std::os::unix::fs::symlink(&origin, &destination)?;
 
-            println!("link {} to {}", origin.display(), destination.display());
+            // println!("link {} to {}", origin.display(), destination.display());
         }
 
         self.mod_state = ModState::Enabled;
