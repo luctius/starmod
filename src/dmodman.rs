@@ -59,7 +59,6 @@ impl TryFrom<File> for DmodMan {
     type Error = serde_json::Error;
 
     fn try_from(file: File) -> Result<Self, Self::Error> {
-        dbg!(&file);
         let reader = BufReader::new(file);
         serde_json::from_reader(reader)
     }
@@ -68,7 +67,6 @@ impl TryFrom<&Path> for DmodMan {
     type Error = Error;
 
     fn try_from(path: &Path) -> Result<Self, Self::Error> {
-        dbg!(&path);
         let dmodman = Self::try_from(File::open(path)?)?;
         Ok(dmodman)
     }

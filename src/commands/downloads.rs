@@ -112,11 +112,11 @@ fn extract_downloaded_file(
             }
         }
 
-        println!(
-            "extracting {} -> {}",
-            download_file.display(),
-            archive.display()
-        );
+        // println!(
+        //     "extracting {} -> {}",
+        //     download_file.display(),
+        //     archive.display()
+        // );
         archive_type.decompress(&download_file, &archive).unwrap();
 
         // Rename all extracted files to their lower-case counterpart
@@ -124,19 +124,15 @@ fn extract_downloaded_file(
         // not know if their name in the fomod package matches their actual names.
         rename_recursive(&archive)?;
 
-        dbg!(&dmodman_file);
         if dmodman_file.exists() {
             let archive_dmodman = archive.with_extension(DMODMAN_EXTENTION);
 
-            println!(
-                "copying dmondman file: {} -> {}",
-                dmodman_file.display(),
-                archive_dmodman.display()
-            );
+            // println!(
+            //     "copying dmondman file: {} -> {}",
+            //     dmodman_file.display(),
+            //     archive_dmodman.display()
+            // );
             std::fs::copy(&dmodman_file, &archive_dmodman)?;
-            dbg!(&archive_dmodman);
-            dbg!(archive_dmodman.exists());
-            dbg!(archive_dmodman.is_file());
         }
 
         let mod_type = ModType::detect_mod_type(&cache_dir, &name)?;

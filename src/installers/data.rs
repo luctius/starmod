@@ -23,12 +23,6 @@ pub fn create_data_manifest(
 
         let dmodman = archive_dir.with_extension(DMODMAN_EXTENTION);
 
-        //FIXME TODO Seek for deeper data dir and strip the prefix from destination
-        //TODO: check for a data dir further in the file tree
-        // to detect mods with an extra dir
-        // we can also make a list of approved dirs for data mods
-        // and warn the user about other dirs.
-
         let walker = WalkDir::new(&archive_dir)
             .min_depth(1)
             .max_depth(usize::MAX)
@@ -41,7 +35,12 @@ pub fn create_data_manifest(
             let entry_path = entry.path();
 
             if entry_path.is_file() {
-                files.push(entry_path.to_path_buf().strip_prefix(&archive_dir)?.into());
+                let file = entry_path
+                    .to_path_buf()
+                    .strip_prefix(&archive_dir)?
+                    .to_path_buf();
+
+                files.push(dbg!(file.into()));
             }
         }
 
@@ -65,11 +64,7 @@ pub fn create_data_manifest(
         let mut version = None;
         let mut nexus_id = None;
         let mut name = mod_dir.to_string_lossy().to_string();
-        dbg!(dmodman.exists());
-        dbg!(dmodman.is_file());
-        dbg!(DmodMan::try_from(dmodman.as_path()));
         if let Ok(dmodman) = DmodMan::try_from(dmodman.as_path()) {
-            dbg!(&dmodman);
             nexus_id = Some(dmodman.mod_id());
             version = dmodman.version();
             name = dmodman.name();

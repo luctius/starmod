@@ -51,21 +51,42 @@ impl Display for ModState {
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct InstallFile {
     pub source: PathBuf,
-    pub destination: PathBuf,
+    pub destination: String,
+}
+impl InstallFile {
+    pub fn new(source: PathBuf, destination: String) -> Self {
+        Self {
+            source,
+            destination: dbg!(format!(
+                "Data/{}",
+                destination
+                    .as_str()
+                    .strip_prefix("data")
+                    .unwrap_or(destination.as_str())
+                    .replace("//", "/")
+                    .to_lowercase()
+            )),
+        }
+    }
 }
 impl From<PathBuf> for InstallFile {
     fn from(pb: PathBuf) -> Self {
-        Self {
-            source: pb.clone(),
-            destination: pb,
-        }
+        Self::from(pb.as_path())
     }
 }
 impl From<&Path> for InstallFile {
     fn from(p: &Path) -> Self {
+        let destination = dbg!(format!(
+            "Data/{}",
+            p.strip_prefix("data")
+                .unwrap_or(p)
+                .to_string_lossy()
+                .replace("//", "/")
+        ));
+
         Self {
             source: p.to_path_buf(),
-            destination: p.to_path_buf(),
+            destination,
         }
     }
 }
@@ -296,17 +317,7 @@ impl Manifest {
     pub fn dest_files(&self) -> Vec<String> {
         let mut dest_files = Vec::with_capacity(self.files.len());
         for f in &self.files {
-            let destination = f.destination.to_string_lossy().to_string().to_lowercase();
-
-            dest_files.push(
-                format!(
-                    "Data/{}",
-                    destination
-                        .strip_prefix(self.mod_type.prefix_to_strip())
-                        .unwrap_or(&destination)
-                )
-                .replace("//", "/"),
-            );
+            dest_files.push(f.destination.clone());
         }
         dest_files
     }

@@ -175,25 +175,24 @@ impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
                     f.source = f.source.replace("\\", "/");
                     f.destination = f.destination.map(|d| d.replace("\\", "/"));
 
-                    let mut destination =
-                        PathBuf::from(f.destination.clone().unwrap_or_else(|| String::new()));
-                    destination.as_mut_os_str().make_ascii_lowercase();
-                    let destination = destination
-                        .clone()
-                        .strip_prefix(DATA_DIR_NAME)
-                        .map_or_else(|_| destination, |d| d.to_path_buf());
-                    let mut source = PathBuf::from(f.source.clone());
-                    source.as_mut_os_str().make_ascii_lowercase();
+                    let destination = f.destination.clone().unwrap_or_else(|| String::new());
+                    let source = PathBuf::from(f.source.clone().to_lowercase());
 
                     files.push(InstallFile {
-                        destination,
+                        destination: dbg!(destination),
                         source,
                     });
                 }
                 fomod::FileTypeEnum::Folder(f) => {
                     let mut f = f.clone();
-                    f.source = f.source.replace("\\", "/");
+                    f.source = f.source.replace("\\", "/").to_lowercase();
                     f.destination = f.destination.map(|d| d.replace("\\", "/"));
+                    f.destination = f
+                        .destination
+                        .as_deref()
+                        .map(|d| d.strip_prefix("data/").map(|d| d.to_lowercase()))
+                        .flatten()
+                        .or(f.destination);
 
                     let mut plugin_dir = archive_dir.to_path_buf();
                     plugin_dir.push(PathBuf::from(f.source.to_lowercase()));
@@ -215,23 +214,17 @@ impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
                                 .strip_prefix(&archive_dir)?
                                 .to_path_buf();
 
-                            let mut destination = PathBuf::from(
-                                f.destination
-                                    .as_ref()
-                                    .map(|d| d.to_lowercase())
-                                    .unwrap_or_else(|| String::new()),
+                            let destination = format!(
+                                "{}/{}",
+                                f.destination.clone().unwrap_or_default(),
+                                source
+                                    .strip_prefix(&f.source)
+                                    .unwrap()
+                                    .to_string_lossy()
+                                    .to_string()
                             );
-                            destination
-                                .push(source.strip_prefix(PathBuf::from(f.source.to_lowercase()))?);
-                            let destination = destination
-                                .clone()
-                                .strip_prefix(DATA_DIR_NAME)
-                                .map_or_else(|_| destination, |d| d.to_path_buf());
 
-                            files.push(InstallFile {
-                                destination,
-                                source,
-                            });
+                            files.push(InstallFile::new(source, destination));
                         }
                     }
                 }

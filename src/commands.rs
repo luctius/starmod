@@ -67,7 +67,7 @@ pub enum Subcommands {
     Extract {
         name: String,
     },
-    ExtractDownloads,
+    ExtractAll,
     List,
     ListDownloads,
     PurgeCache,
@@ -101,7 +101,7 @@ impl Subcommands {
             Subcommands::ListDownloads => {
                 downloads::list_downloaded_files(&settings.download_dir())
             }
-            Subcommands::ExtractDownloads => {
+            Subcommands::ExtractAll => {
                 downloads::extract_downloaded_files(
                     &settings.download_dir(),
                     &settings.cache_dir(),
