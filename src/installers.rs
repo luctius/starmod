@@ -4,6 +4,8 @@ pub mod data;
 pub mod fomod;
 pub mod loader;
 
+// These are existing directories in the Starfield game dir
+// Ensure we use the same casing to avoid multiple similar directories.
 pub const DATA_DIR_NAME: &'static str = "Data";
 pub const TEXTURES_DIR_NAME: &'static str = "Textures";
 

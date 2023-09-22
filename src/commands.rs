@@ -20,7 +20,10 @@ use crate::{
     Settings,
 };
 
-use self::modlist::{find_mod, gather_mods};
+use self::{
+    downloads::downloaded_files,
+    modlist::{find_mod, gather_mods},
+};
 
 #[derive(Subcommand, Debug, Clone)]
 pub enum Subcommands {
@@ -99,7 +102,8 @@ impl Subcommands {
 
         match self {
             Subcommands::ListDownloads => {
-                downloads::list_downloaded_files(&settings.download_dir())
+                //TODO also show wether or not it is allready installed
+                list_downloaded_files(&settings.download_dir(), &settings.cache_dir())
             }
             Subcommands::ExtractAll => {
                 downloads::extract_downloaded_files(
@@ -132,7 +136,7 @@ impl Subcommands {
             }
             Subcommands::Disable { name } => {
                 enable::disable_mod(&settings.cache_dir(), &settings.game_dir(), &name)?;
-                show_mod(&settings.cache_dir(), &name)
+                list_mods(&settings.cache_dir())
             }
             Subcommands::UpdateConfig {
                 download_dir,
@@ -351,6 +355,31 @@ fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> R
         println!("No relevant config files found.");
     }
 
+    Ok(())
+}
+
+pub fn list_downloaded_files(download_dir: &Path, cache_dir: &Path) -> Result<()> {
+    let sf = downloaded_files(download_dir);
+
+    let mut table = create_table(vec!["Archive", "Status"]);
+
+    for (_, f) in sf {
+        let mut archive = PathBuf::from(cache_dir);
+        let file = f.to_string_lossy().to_string().to_lowercase();
+        archive.push(file.clone());
+        archive.set_extension("ron");
+
+        table.add_row(vec![
+            Cell::new(f.to_string_lossy()).fg(Color::White),
+            Cell::new(match archive.exists() && archive.is_file() {
+                true => "Installed".to_string(),
+                false => "New".to_string(),
+            })
+            .fg(Color::White),
+        ]);
+    }
+
+    println!("{table}");
     Ok(())
 }
 

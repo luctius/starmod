@@ -20,7 +20,7 @@ pub enum DownloadError {
     ArchiveNotFound(String),
 }
 
-fn downloaded_files(download_dir: &Path) -> Vec<(SupportedArchives, OsString)> {
+pub fn downloaded_files(download_dir: &Path) -> Vec<(SupportedArchives, OsString)> {
     let mut supported_files = Vec::new();
     let paths = fs::read_dir(download_dir).unwrap();
 
@@ -28,22 +28,11 @@ fn downloaded_files(download_dir: &Path) -> Vec<(SupportedArchives, OsString)> {
         if let Ok(path) = path {
             if let Ok(typ) = SupportedArchives::from_path(&path.path()) {
                 supported_files.push((typ, path.file_name()));
-                // println!("Name: {}, type: {}", path.path().display(), typ);
             }
         }
     }
 
     supported_files
-}
-
-pub fn list_downloaded_files(download_dir: &Path) -> Result<()> {
-    let sf = downloaded_files(download_dir);
-    for (_, f) in sf {
-        let mut download_file = PathBuf::from(download_dir);
-        download_file.push(f.clone());
-        println!("\t- {}", download_file.display());
-    }
-    Ok(())
 }
 
 pub fn extract_downloaded_files(download_dir: &Path, cache_dir: &Path) -> Result<()> {
@@ -77,8 +66,7 @@ fn extract_downloaded_file(
 
     //destination:
     //Force utf-8 compatible strings, in lower-case, here to simplify futher code.
-    let file = file.clone();
-    let file = OsString::from(file.to_string_lossy().to_string().to_lowercase());
+    let file = file.to_string_lossy().to_string().to_lowercase();
     archive.push(file.clone());
     archive.set_extension("");
 
@@ -100,7 +88,7 @@ fn extract_downloaded_file(
     {
         // Archive exists and is valid
         // Nothing to do
-        // TODO: println!("skipping {}", download_file.display());
+        log::debug!("skipping {}", download_file.display());
     } else {
         //TODO: if either one of Dir or Manifest file is missing or corrupt, remove them,
 
@@ -112,11 +100,11 @@ fn extract_downloaded_file(
             }
         }
 
-        // println!(
-        //     "extracting {} -> {}",
-        //     download_file.display(),
-        //     archive.display()
-        // );
+        log::info!(
+            "extracting {} -> {}",
+            download_file.display(),
+            archive.display()
+        );
         archive_type.decompress(&download_file, &archive).unwrap();
 
         // Rename all extracted files to their lower-case counterpart
@@ -127,11 +115,11 @@ fn extract_downloaded_file(
         if dmodman_file.exists() {
             let archive_dmodman = archive.with_extension(DMODMAN_EXTENTION);
 
-            // println!(
-            //     "copying dmondman file: {} -> {}",
-            //     dmodman_file.display(),
-            //     archive_dmodman.display()
-            // );
+            log::trace!(
+                "copying dmondman file: {} -> {}",
+                dmodman_file.display(),
+                archive_dmodman.display()
+            );
             std::fs::copy(&dmodman_file, &archive_dmodman)?;
         }
 
@@ -172,7 +160,7 @@ fn lower_case(path: &Path) -> Result<()> {
     let name = name.as_os_str();
     let name = path.with_file_name(name);
 
-    // println!("ren {} -> {}", path.display(), name.display());
+    log::trace!("ren {} -> {}", path.display(), name.display());
 
     std::fs::rename(path, path.with_file_name(name).as_path())?;
 

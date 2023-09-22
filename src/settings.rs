@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use clap::ValueEnum;
 use comfy_table::{presets::NOTHING, ContentArrangement, Table};
 use serde::{Deserialize, Serialize};
 use std::{
@@ -10,6 +11,8 @@ use std::{
 };
 use thiserror::Error;
 use xdg::BaseDirectories;
+
+use simplelog::LevelFilter;
 
 use crate::{dmodman::DModManConfig, game::Game};
 
@@ -44,14 +47,38 @@ pub enum SettingErrors {
     NoSteamDirFound(String),
 }
 
+#[derive(
+    Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Default, Deserialize, Serialize,
+)]
+pub enum LogLevel {
+    Error,
+    #[default]
+    Warn,
+    Info,
+    Debug,
+    Trace,
+}
+impl From<LogLevel> for LevelFilter {
+    fn from(ll: LogLevel) -> Self {
+        match ll {
+            LogLevel::Error => Self::Error,
+            LogLevel::Warn => Self::Warn,
+            LogLevel::Info => Self::Info,
+            LogLevel::Debug => Self::Debug,
+            LogLevel::Trace => Self::Trace,
+        }
+    }
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Settings {
     #[serde(skip_serializing, default)]
     game: Game,
     #[serde(skip_serializing, default)]
-    verbosity: u8,
+    verbosity: LogLevel,
     cache_dir: PathBuf,
     config_path: PathBuf,
+    log_path: PathBuf,
     download_dir: PathBuf,
     game_dir: PathBuf,
     proton_dir: Option<PathBuf>,
@@ -60,7 +87,7 @@ pub struct Settings {
     editor: Option<String>,
 }
 impl Settings {
-    fn create(verbosity: u8) -> Result<Self> {
+    fn create(verbosity: LogLevel) -> Result<Self> {
         //Extract cmd used to run this application
         let name = PathBuf::from(std::env::args().nth(0).unwrap())
             .file_name()
@@ -76,6 +103,7 @@ impl Settings {
         let config_path = xdg_base
             .place_config_file(config_file)
             .with_context(|| format!("Cannot create configuration directory for {}", name))?;
+        let log_path = config_path.with_extension("log");
 
         let download_dir = DModManConfig::read().map(|dc| dc.download_dir()).flatten();
         let download_dir = download_dir
@@ -106,6 +134,7 @@ impl Settings {
             game,
             verbosity,
             config_path,
+            log_path,
             download_dir,
             cache_dir,
             game_dir: PathBuf::from(""),
@@ -131,6 +160,12 @@ impl Settings {
     pub fn cmd_name(&self) -> &str {
         self.game.name()
     }
+    pub fn config_file(&self) -> &Path {
+        &self.config_path
+    }
+    pub fn log_file(&self) -> &Path {
+        &self.log_path
+    }
     pub fn download_dir(&self) -> &Path {
         &self.download_dir
     }
@@ -152,7 +187,7 @@ impl Settings {
     pub fn editor(&self) -> String {
         self.editor.clone().unwrap_or("xdg-open".to_owned())
     }
-    pub fn read_config(verbosity: u8) -> Result<Self> {
+    pub fn read_config(verbosity: LogLevel) -> Result<Self> {
         let settings = Self::create(verbosity)?;
         if let Ok(config) = File::open(&settings.config_path) {
             let mut read_settings = Self::try_from(config)?;

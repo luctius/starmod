@@ -40,7 +40,7 @@ pub fn create_data_manifest(
                     .strip_prefix(&archive_dir)?
                     .to_path_buf();
 
-                files.push(dbg!(file.into()));
+                files.push(file.into());
             }
         }
 

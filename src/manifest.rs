@@ -9,7 +9,11 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
-use crate::{dmodman::DMODMAN_EXTENTION, installers::DATA_DIR_NAME, mod_types::ModType};
+use crate::{
+    dmodman::DMODMAN_EXTENTION,
+    installers::{DATA_DIR_NAME, TEXTURES_DIR_NAME},
+    mod_types::ModType,
+};
 
 //TODO: replace PathBuf with something that is ressilient to deserialisation of non-utf8 characters
 
@@ -58,12 +62,14 @@ impl InstallFile {
         Self {
             source,
             destination: format!(
-                "Data/{}",
+                "{}/{}",
+                DATA_DIR_NAME,
                 destination
                     .as_str()
                     .strip_prefix("data")
                     .unwrap_or(destination.as_str())
                     .replace("//", "/")
+                    .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME))
                     .to_lowercase()
             ),
         }
@@ -77,11 +83,13 @@ impl From<PathBuf> for InstallFile {
 impl From<&Path> for InstallFile {
     fn from(p: &Path) -> Self {
         let destination = format!(
-            "Data/{}",
+            "{}/{}",
+            DATA_DIR_NAME,
             p.strip_prefix("data")
                 .unwrap_or(p)
                 .to_string_lossy()
                 .replace("//", "/")
+                .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME))
         );
 
         Self {
@@ -229,7 +237,12 @@ impl Manifest {
 
                 if target.starts_with(&cache_dir) {
                     remove_file(&destination)?;
-                    //TODO verbose println!("removed {} -> {}", destination.display(), target.display());
+                    log::debug!(
+                        "overrule {} ({} > {})",
+                        destination.display(),
+                        origin.display(),
+                        target.display()
+                    );
                 } else {
                     let bkp_destination = destination.with_file_name(format!(
                         "{}.starmod_bkp",
@@ -239,9 +252,7 @@ impl Manifest {
                             .flatten()
                             .unwrap_or_default()
                     ));
-                    //TODO: can we handle foreign files better than this?
-                    // eprintln!("Not removing foreign file: {}", target.display());
-                    println!(
+                    log::info!(
                         "renaming foreign file from {} -> {}",
                         destination.display(),
                         bkp_destination.display()
@@ -252,7 +263,7 @@ impl Manifest {
 
             std::os::unix::fs::symlink(&origin, &destination)?;
 
-            // println!("link {} to {}", origin.display(), destination.display());
+            log::trace!("link {} to {}", origin.display(), destination.display());
         }
 
         self.mod_state = ModState::Enabled;
@@ -284,10 +295,11 @@ impl Manifest {
                 && origin == read_link(&destination)?
             {
                 remove_file(&destination)?;
-                //TODO verbose println!("removed {} -> {}", destination.display(), origin.display());
+                log::trace!("removed {} -> {}", destination.display(), origin.display());
+
+                //TODO: move backup file back in place
             } else {
-                // dbg!(origin == read_link(&destination)?);
-                println!("Skipping {}", destination.display());
+                log::debug!("passing-over {}", destination.display());
             }
         }
 
