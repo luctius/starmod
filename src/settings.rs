@@ -30,6 +30,18 @@ pub enum SettingErrors {
         "The cache directory cannot be found, Please run '{0} update-config' and provide manually."
     )]
     NoCacheDirFound(String),
+    #[error(
+        "The proton directory cannot be found, Please run '{0} update-config' and provide manually."
+    )]
+    NoProtonDirFound(String),
+    #[error(
+        "The compat directory cannot be found, Please run '{0} update-config' and provide manually."
+    )]
+    NoCompatDirFound(String),
+    #[error(
+        "The steam directory cannot be found, Please run '{0} update-config' and provide manually."
+    )]
+    NoSteamDirFound(String),
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -43,7 +55,8 @@ pub struct Settings {
     download_dir: PathBuf,
     game_dir: PathBuf,
     proton_dir: Option<PathBuf>,
-    user_dir: Option<PathBuf>,
+    compat_dir: Option<PathBuf>,
+    steam_dir: Option<PathBuf>,
     editor: Option<String>,
 }
 impl Settings {
@@ -74,7 +87,20 @@ impl Settings {
         let editor = env::vars().find_map(|(key, val)| (key == EDITOR_ENV).then(|| val));
 
         let proton_dir = None;
-        let user_dir = None;
+        let compat_dir = None;
+        let steam_dir = dirs::home_dir().map(|mut d| {
+            d.push(".steam/steam");
+            d
+        });
+        let steam_dir = if let Some(steam_dir) = steam_dir {
+            if steam_dir.exists() {
+                Some(steam_dir)
+            } else {
+                None
+            }
+        } else {
+            None
+        };
 
         Ok(Self {
             game,
@@ -85,7 +111,8 @@ impl Settings {
             game_dir: PathBuf::from(""),
             editor,
             proton_dir,
-            user_dir,
+            compat_dir,
+            steam_dir,
         })
     }
     pub fn valid_config(&self) -> bool {
@@ -97,6 +124,9 @@ impl Settings {
             && self.cache_dir.is_dir()
             && self.game_dir.exists()
             && self.game_dir.is_dir()
+    }
+    pub fn game(&self) -> &Game {
+        &self.game
     }
     pub fn cmd_name(&self) -> &str {
         self.game.name()
@@ -110,8 +140,17 @@ impl Settings {
     pub fn game_dir(&self) -> &Path {
         &self.game_dir
     }
-    pub fn editor(&self) -> Option<&str> {
-        self.editor.as_deref()
+    pub fn proton_dir(&self) -> Option<&Path> {
+        self.proton_dir.as_deref()
+    }
+    pub fn compat_dir(&self) -> Option<&Path> {
+        self.compat_dir.as_deref()
+    }
+    pub fn steam_dir(&self) -> Option<&Path> {
+        self.steam_dir.as_deref()
+    }
+    pub fn editor(&self) -> String {
+        self.editor.clone().unwrap_or("xdg-open".to_owned())
     }
     pub fn read_config(verbosity: u8) -> Result<Self> {
         let settings = Self::create(verbosity)?;
@@ -131,7 +170,7 @@ impl Settings {
         game_dir: Option<PathBuf>,
         cache_dir: Option<PathBuf>,
         proton_dir: Option<PathBuf>,
-        user_dir: Option<PathBuf>,
+        compat_dir: Option<PathBuf>,
         editor: Option<String>,
     ) -> Result<Self> {
         let mut settings = self.clone();
@@ -167,7 +206,7 @@ impl Settings {
 
         //FIXME TODO check these if they are provided
         settings.proton_dir = proton_dir.or_else(|| self.proton_dir.clone());
-        settings.user_dir = user_dir.or_else(|| self.user_dir.clone());
+        settings.compat_dir = compat_dir.or_else(|| self.compat_dir.clone());
         settings.editor = editor.or_else(|| self.editor.clone());
 
         let mut file = File::create(&self.config_path)?;
@@ -244,7 +283,7 @@ impl Display for Settings {
                 "User Dir".to_owned(),
                 format!(
                     "{}",
-                    self.user_dir
+                    self.compat_dir
                         .as_ref()
                         .map(|d| d.display().to_string())
                         .unwrap_or("<Unknown>".to_owned())

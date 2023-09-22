@@ -12,7 +12,7 @@ use crate::{
     installers::{
         data::create_data_manifest,
         fomod::{create_fomod_manifest, FOMOD_INFO_FILE, FOMOD_MODCONFIG_FILE},
-        plugin::create_plugin_manifest,
+        loader::create_loader_manifest,
         InstallerError,
     },
     manifest::Manifest,
@@ -23,11 +23,9 @@ use crate::{
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ModType {
     // Goes into Data
-    DataMod { data_start: PathBuf },
+    DataMod { data_start: String },
     //Installer
     FoMod,
-    //Goes into the root dir
-    Plugin,
     //Goes into the root dir
     Loader,
 }
@@ -36,14 +34,13 @@ impl ModType {
         match self {
             Self::DataMod { .. } => create_data_manifest(self, cache_dir, name),
             Self::FoMod => create_fomod_manifest(self, cache_dir, name),
-            Self::Plugin => create_plugin_manifest(self, cache_dir, name),
-            Self::Loader => create_plugin_manifest(self, cache_dir, name),
+            Self::Loader => create_loader_manifest(self, cache_dir, name),
         }
     }
-    pub fn prefix_to_strip(&self) -> PathBuf {
+    pub fn prefix_to_strip(&self) -> &str {
         match self {
-            Self::FoMod | Self::Plugin | Self::Loader => PathBuf::new(),
-            Self::DataMod { data_start } => data_start.to_owned(),
+            Self::FoMod | Self::Loader => "",
+            Self::DataMod { data_start } => data_start.as_str(),
         }
     }
     pub fn detect_mod_type(cache_dir: &Path, name: &Path) -> Result<Self> {
@@ -98,24 +95,6 @@ impl ModType {
             }
         }
 
-        let walker = WalkDir::new(&archive_dir)
-            .min_depth(1)
-            .max_depth(4)
-            .follow_links(false)
-            .same_file_system(true)
-            .contents_first(true);
-
-        for entry in walker {
-            let entry = entry?;
-            let entry_path = entry.path();
-
-            if let Some(ext) = entry_path.extension() {
-                if ext == "dll" {
-                    return Ok(Self::Plugin);
-                }
-            }
-        }
-
         let mut data_path = None;
         let walker = WalkDir::new(&archive_dir)
             .min_depth(1)
@@ -166,7 +145,7 @@ impl ModType {
         }
 
         Ok(Self::DataMod {
-            data_start: data_path.unwrap_or_else(|| PathBuf::from("")),
+            data_start: data_path.unwrap_or_default().to_string_lossy().to_string(),
         })
     }
 }
@@ -175,7 +154,6 @@ impl Display for ModType {
         match self {
             Self::DataMod { .. } => f.write_str("Data"),
             Self::FoMod => f.write_str("FoMod"),
-            Self::Plugin => f.write_str("Plugin"),
             Self::Loader => f.write_str("Loader"),
         }
     }

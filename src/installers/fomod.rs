@@ -5,7 +5,6 @@ use encoding_rs_io::DecodeReaderBytes;
 
 use anyhow::Result;
 use fomod::{Config, Dependency, DependencyOperator, FlagDependency, Info};
-use lazy_regex::regex_captures;
 use read_stdin::prompt_until_ok;
 use std::{
     collections::HashSet,

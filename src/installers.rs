@@ -2,7 +2,7 @@ use thiserror::Error;
 
 pub mod data;
 pub mod fomod;
-pub mod plugin;
+pub mod loader;
 
 pub const DATA_DIR_NAME: &'static str = "Data";
 pub const TEXTURES_DIR_NAME: &'static str = "Textures";

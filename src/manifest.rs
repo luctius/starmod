@@ -155,6 +155,9 @@ impl Manifest {
     pub fn name(&self) -> &str {
         &self.name
     }
+    pub fn set_name(&mut self, name: String) {
+        self.name = name
+    }
     pub fn nexus_id(&self) -> Option<u32> {
         self.nexus_id
     }
@@ -188,8 +191,7 @@ impl Manifest {
 
             let destination = {
                 let mut game_dir = game_dir.clone();
-                game_dir.push(PathBuf::from(DATA_DIR_NAME));
-                game_dir.push(PathBuf::from(df).strip_prefix(self.mod_type.prefix_to_strip())?);
+                game_dir.push(PathBuf::from(df));
                 game_dir
             };
 
@@ -252,8 +254,7 @@ impl Manifest {
             };
             let destination = {
                 let mut game_dir = game_dir.clone();
-                game_dir.push(PathBuf::from(DATA_DIR_NAME));
-                game_dir.push(PathBuf::from(df).strip_prefix(self.mod_type.prefix_to_strip())?);
+                game_dir.push(PathBuf::from(df));
                 game_dir
             };
 
@@ -297,7 +298,15 @@ impl Manifest {
         for f in &self.files {
             let destination = f.destination.to_string_lossy().to_string().to_lowercase();
 
-            dest_files.push(destination);
+            dest_files.push(
+                format!(
+                    "Data/{}",
+                    destination
+                        .strip_prefix(self.mod_type.prefix_to_strip())
+                        .unwrap_or(&destination)
+                )
+                .replace("//", "/"),
+            );
         }
         dest_files
     }

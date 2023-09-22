@@ -1,7 +1,6 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-use lazy_regex::regex_captures;
 use walkdir::WalkDir;
 
 use crate::{
@@ -10,7 +9,7 @@ use crate::{
     mod_types::ModType,
 };
 
-pub fn create_plugin_manifest(
+pub fn create_loader_manifest(
     mod_type: ModType,
     cache_dir: &Path,
     mod_dir: &Path,

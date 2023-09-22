@@ -62,12 +62,17 @@ impl Game {
     }
     pub const fn loader_name(&self) -> &'static str {
         match self {
-            Self::StarMod => "sfse.exe",
+            Self::StarMod => "sfse_loader.exe",
         }
     }
     pub const fn ini_files(&self) -> &[&'static str] {
         match self {
             Self::StarMod => &["Starfield.ini", "StarfieldPrefs.ini", "StarfieldCustom.ini"],
+        }
+    }
+    pub const fn my_game_dir(&self) -> &'static str {
+        match self {
+            Self::StarMod => "pfx/drive_c/users/steamuser/My Documents/My Games/Starfield",
         }
     }
     pub fn find_game(&self) -> Option<PathBuf> {

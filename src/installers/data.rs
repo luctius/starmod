@@ -1,7 +1,6 @@
 use anyhow::Result;
 use std::path::{Path, PathBuf};
 
-use lazy_regex::regex_captures;
 use walkdir::WalkDir;
 
 use crate::{

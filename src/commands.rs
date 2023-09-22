@@ -11,11 +11,12 @@ use std::{
 use anyhow::Result;
 use clap::Subcommand;
 use comfy_table::{Cell, Color};
+use walkdir::WalkDir;
 
 use crate::{
     commands::conflict::{conflict_list_by_file, conflict_list_by_mod},
     manifest::Manifest,
-    settings::create_table,
+    settings::{create_table, SettingErrors},
     Settings,
 };
 
@@ -32,8 +33,8 @@ pub enum Subcommands {
         cache_dir: Option<PathBuf>,
         #[arg(short, long)]
         proton_dir: Option<PathBuf>,
-        #[arg(short, long)]
-        user_dir: Option<PathBuf>,
+        #[arg(short = 'o', long)]
+        compat_dir: Option<PathBuf>,
         #[arg(short, long)]
         editor: Option<String>,
         // #[arg(short, long)]
@@ -74,10 +75,10 @@ pub enum Subcommands {
     Remove {
         name: String,
     },
-    // RenameMod {
-    //     old_mod_name: String,
-    //     new_mod_name: String,
-    // },
+    RenameMod {
+        old_mod_name: String,
+        new_mod_name: String,
+    },
     Run {
         #[arg(short, long)]
         loader: bool,
@@ -94,6 +95,8 @@ pub enum Subcommands {
 }
 impl Subcommands {
     pub fn execute(self, settings: &Settings) -> Result<()> {
+        //General TODO: Be more consistant in errors, error messages warnings etc.
+
         match self {
             Subcommands::ListDownloads => {
                 downloads::list_downloaded_files(&settings.download_dir())
@@ -140,7 +143,7 @@ impl Subcommands {
                 game_dir,
                 cache_dir,
                 proton_dir,
-                user_dir,
+                compat_dir,
                 editor,
             } => {
                 let settings = settings.create_config(
@@ -148,7 +151,7 @@ impl Subcommands {
                     game_dir,
                     cache_dir,
                     proton_dir,
-                    user_dir,
+                    compat_dir,
                     editor,
                 )?;
                 println!("{}", &settings);
@@ -163,7 +166,9 @@ impl Subcommands {
                 config_name,
                 extension,
             } => edit_mod_config_files(&settings, name, config_name, extension),
-            Subcommands::EditGameConfig { config_name: _ } => todo!(),
+            Subcommands::EditGameConfig { config_name } => {
+                edit_game_config_files(settings, config_name)
+            }
             Subcommands::PurgeConfig => {
                 enable::disable_all(&settings.cache_dir(), &settings.game_dir())?;
                 settings.purge_config()
@@ -176,17 +181,39 @@ impl Subcommands {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(manifest) = find_mod(&mod_list, &name) {
                     manifest.remove(&settings.cache_dir())?;
+                    list_mods(&settings.cache_dir())?;
+                } else {
+                    println!("Mod '{name}' not found.")
                 }
                 Ok(())
             }
-            Subcommands::Run { loader: _ } => todo!(),
+            Subcommands::Run { loader } => run_game(&settings, loader),
             Subcommands::ShowLegenda => show_legenda(),
             Subcommands::SetPriority { name, priority } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(mut m) = find_mod(&mod_list, &name) {
                     m.set_priority(priority);
+                    if priority < 0 {
+                        m.disable(&settings.cache_dir(), &settings.game_dir())?;
+                    }
                     m.write_manifest(&settings.cache_dir())?;
                     list_mods(&settings.cache_dir())?;
+                } else {
+                    println!("Mod '{name}' not found.")
+                }
+                Ok(())
+            }
+            Subcommands::RenameMod {
+                old_mod_name,
+                new_mod_name,
+            } => {
+                let mod_list = gather_mods(&settings.cache_dir())?;
+                if let Some(mut m) = find_mod(&mod_list, &old_mod_name) {
+                    m.set_name(new_mod_name);
+                    m.write_manifest(&settings.cache_dir())?;
+                    list_mods(&settings.cache_dir())?;
+                } else {
+                    println!("Mod '{old_mod_name}' not found.")
                 }
                 Ok(())
             }
@@ -194,7 +221,48 @@ impl Subcommands {
     }
 }
 
-fn run_game(game_dir: &Path) {}
+fn run_game(settings: &Settings, loader: bool) -> Result<()> {
+    if let Some(proton_dir) = settings.proton_dir() {
+        if let Some(compat_dir) = settings.compat_dir() {
+            if let Some(steam_dir) = settings.steam_dir() {
+                let mut compat_dir = compat_dir.to_path_buf();
+                if compat_dir
+                    .file_name()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or_default()
+                    != settings.game().steam_id().to_string().as_str()
+                {
+                    compat_dir.push(settings.game().steam_id().to_string());
+                }
+                let mut proton_exe = proton_dir.to_path_buf();
+                proton_exe.push("proton");
+                let mut game_exe = settings.game_dir().to_path_buf();
+
+                if !loader {
+                    game_exe.push(settings.game().exe_name());
+                } else {
+                    game_exe.push(settings.game().loader_name());
+                }
+
+                std::process::Command::new(proton_exe)
+                    .arg("run")
+                    // .arg("waitforexitandrun")
+                    .arg(game_exe)
+                    .env("STEAM_COMPAT_DATA_PATH", compat_dir)
+                    .env("STEAM_COMPAT_CLIENT_INSTALL_PATH", steam_dir)
+                    .output()?;
+                Ok(())
+            } else {
+                Err(SettingErrors::NoSteamDirFound(settings.cmd_name().to_owned()).into())
+            }
+        } else {
+            Err(SettingErrors::NoCompatDirFound(settings.cmd_name().to_owned()).into())
+        }
+    } else {
+        Err(SettingErrors::NoProtonDirFound(settings.cmd_name().to_owned()).into())
+    }
+}
 
 fn edit_mod_config_files(
     settings: &Settings,
@@ -202,45 +270,87 @@ fn edit_mod_config_files(
     config_name: Option<String>,
     extension: Option<String>,
 ) -> Result<()> {
-    if let Some(editor) = settings.editor() {
-        let mut config_files_to_edit = Vec::new();
-        let mod_list = gather_mods(&settings.cache_dir())?;
-        if let Some(manifest) = modlist::find_mod(&mod_list, &name) {
-            let config_list = manifest.find_config_files(extension.as_deref());
-            if let Some(config_name) = config_name {
-                if let Some(cf) = config_list.iter().find(|f| {
-                    f.file_name()
-                        .map(|f| f.to_str())
-                        .flatten()
-                        .unwrap_or_default()
-                        == config_name
-                }) {
-                    let mut config_path = settings.cache_dir().to_path_buf();
-                    config_path.push(cf);
-                    config_files_to_edit.push(config_path)
-                }
-            } else {
-                for cf in config_list {
-                    let mut config_path = settings.cache_dir().to_path_buf();
-                    config_path.push(cf);
-                    config_files_to_edit.push(config_path)
-                }
+    let mut config_files_to_edit = Vec::new();
+    let mod_list = gather_mods(&settings.cache_dir())?;
+    if let Some(manifest) = modlist::find_mod(&mod_list, &name) {
+        let config_list = manifest.find_config_files(extension.as_deref());
+        if let Some(config_name) = config_name {
+            if let Some(cf) = config_list.iter().find(|f| {
+                f.file_name()
+                    .map(|f| f.to_str())
+                    .flatten()
+                    .unwrap_or_default()
+                    == config_name
+            }) {
+                let mut config_path = settings.cache_dir().to_path_buf();
+                config_path.push(cf);
+                config_files_to_edit.push(config_path)
             }
-        }
-
-        if !config_files_to_edit.is_empty() {
-            println!("Editing: {:?}", config_files_to_edit);
-
-            let mut editor_cmd = std::process::Command::new(editor);
-            for f in config_files_to_edit {
-                editor_cmd.arg(f);
-            }
-            editor_cmd.output()?;
         } else {
-            println!("No relevant config files found.");
+            for cf in config_list {
+                let mut config_path = settings.cache_dir().to_path_buf();
+                config_path.push(cf);
+                config_files_to_edit.push(config_path)
+            }
         }
+    }
+
+    if !config_files_to_edit.is_empty() {
+        println!("Editing: {:?}", config_files_to_edit);
+
+        let mut editor_cmd = std::process::Command::new(settings.editor());
+        for f in config_files_to_edit {
+            editor_cmd.arg(f);
+        }
+        editor_cmd.spawn()?.wait()?;
     } else {
-        println!("Editor not configured.");
+        println!("No relevant config files found.");
+    }
+
+    Ok(())
+}
+
+fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> Result<()> {
+    let mut config_files_to_edit = Vec::new();
+    let mut game_my_document_dir = settings.compat_dir().unwrap().to_path_buf();
+    game_my_document_dir.push(settings.game().steam_id().to_string());
+    game_my_document_dir.push(settings.game().my_game_dir());
+
+    if let Some(config_name) = config_name {
+        game_my_document_dir.push(config_name);
+        config_files_to_edit.push(game_my_document_dir);
+    } else {
+        WalkDir::new(game_my_document_dir.as_path())
+            .min_depth(1)
+            .max_depth(usize::MAX)
+            .follow_links(false)
+            .same_file_system(false)
+            .contents_first(false)
+            .into_iter()
+            .filter_entry(|entry| {
+                entry
+                    .file_name()
+                    .to_str()
+                    .map(|f| settings.game().ini_files().contains(&f))
+                    .unwrap_or(false)
+            })
+            .for_each(|f| {
+                if let Ok(f) = f {
+                    config_files_to_edit.push(f.into_path())
+                }
+            });
+    }
+
+    if !config_files_to_edit.is_empty() {
+        println!("Editing: {:?}", config_files_to_edit);
+
+        let mut editor_cmd = std::process::Command::new(settings.editor());
+        for f in config_files_to_edit {
+            editor_cmd.arg(f);
+        }
+        editor_cmd.spawn()?.wait()?;
+    } else {
+        println!("No relevant config files found.");
     }
 
     Ok(())

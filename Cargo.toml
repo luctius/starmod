@@ -11,6 +11,8 @@ description = "Cmdline Modmanager for Starfield on Linux/Proton"
 
 [dependencies]
 shadow-rs = "0.21.0"
+anyhow = "1.0"
+thiserror = "1.0"
 clap = {version = "4.4.3", features = ["derive"] }
 strum = { version = "0.24", default-features = false, features = ["derive"] }
 strum_macros = "0.24"
@@ -19,12 +21,11 @@ rust-lzma = "0.5"
 tar = "0.4"
 sevenz-rust = "0.5.2"
 flate2 = "1.0.27"
-anyhow = "1.0"
-thiserror = "1.0"
 unrar = "0.5.1"
-ron = "0.8"
 serde = { version = "1", features = ["derive"] }
-# libloadorder = "11.4.1"
+ron = "0.8"
+serde_json = "1.0.107"
+toml = "0.8.0" # By now we have added almost every format available...
 # fomod = "0.2.0"
 fomod = { git = "https://github.com/luctius/fomod.git", branch = "main"}
 walkdir = "2.4.0"
@@ -36,9 +37,16 @@ encoding_rs_io = "0.1.7"
 read-stdin = "1.1.1"
 # camino = "1.1.6" //TODO use camino instead of Path and PathBuf
 # enum-kinds = "0.5.1"
-lazy-regex = "3.0.2"
-serde_json = "1.0.107"
-toml = "0.8.0" # By now we have added almost every format available...
+# libloadorder = "11.4.1"
 
 [build-dependencies]
 shadow-rs = "0.21.0"
+
+[profile.release]
+codegen-units = 1
+debug = 0
+debug-assertions = false
+incremental = false
+lto = 'fat'
+opt-level = "z"
+overflow-checks = true
