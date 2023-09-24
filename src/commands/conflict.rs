@@ -28,8 +28,6 @@ pub fn conflict_list_by_file(mods: &[Mod]) -> Result<HashMap<String, Vec<String>
     // populate with all files
     mods.iter().for_each(|m| {
         if m.is_enabled() {
-            dbg!(&m);
-            // dbg!(&m.dest_files());
             m.dest_files().iter().for_each(|f| {
                 all_files.insert(f.clone(), Vec::new());
             })
@@ -48,15 +46,7 @@ pub fn conflict_list_by_file(mods: &[Mod]) -> Result<HashMap<String, Vec<String>
     });
 
     // Remove all files without conflicts
-    // all_files.retain(|_k, v| v.len() > 1);
-    all_files.retain(|_k, v| {
-        if v.len() > 1 {
-            true
-        } else {
-            // dbg!(_k);
-            false
-        }
-    });
+    all_files.retain(|_k, v| v.len() > 1);
 
     Ok(all_files)
 }
