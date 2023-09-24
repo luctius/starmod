@@ -58,7 +58,7 @@ pub fn create_custom_manifest(
         }
     });
 
-    let version = None;
+    let version = Some("Custom".to_owned());
     let nexus_id = None;
 
     Ok(Manifest::new(

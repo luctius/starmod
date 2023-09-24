@@ -63,10 +63,10 @@ impl InstallFile {
                 .as_str()
                 .strip_prefix("data")
                 .unwrap_or(destination.as_str())
-                .replace("//", "/")
-                .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME))
                 .to_lowercase()
-        );
+        )
+        .replace("//", "/")
+        .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME));
 
         log::trace!("New InstallFile: {} -> {}", source.display(), destination);
 
@@ -93,12 +93,10 @@ impl From<&Path> for InstallFile {
         let destination = format!(
             "{}/{}",
             DATA_DIR_NAME,
-            p.strip_prefix("data")
-                .unwrap_or(p)
-                .to_string_lossy()
-                .replace("//", "/")
-                .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME))
-        );
+            p.strip_prefix("data").unwrap_or(p).to_string_lossy()
+        )
+        .replace("//", "/")
+        .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME));
 
         log::trace!("New InstallFile: {} -> {}", source.display(), destination);
         Self {

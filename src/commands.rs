@@ -89,14 +89,14 @@ pub enum Subcommands {
     ListDownloads,
     PurgeCache,
     PurgeConfig,
-    Remove {
+    RemoveMod {
         name: String,
     },
     ReInstall {
         name: String,
     },
     ReEnableAll,
-    RenameMod {
+    Rename {
         old_mod_name: String,
         new_mod_name: String,
     },
@@ -234,9 +234,11 @@ impl Subcommands {
             Subcommands::ShowFiles { name } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(manifest) = find_mod(&mod_list, &name) {
+                    //TODO: Table
                     for f in manifest.dest_files() {
                         log::info!("{f}");
                     }
+                    //TODO: Show Disabled Files
                 } else {
                     log::warn!("Mod '{}' could not be found", name);
                 }
@@ -297,7 +299,7 @@ impl Subcommands {
                 enable::disable_all(&settings.cache_dir(), &settings.game_dir())?;
                 settings.purge_cache()
             }
-            Subcommands::Remove { name } => {
+            Subcommands::RemoveMod { name } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(mut md) = find_mod(&mod_list, &name) {
                     md.disable(&settings.cache_dir(), &settings.game_dir())?;
@@ -351,7 +353,7 @@ impl Subcommands {
                 log::info!("Mods re-enabled.");
                 Ok(())
             }
-            Subcommands::RenameMod {
+            Subcommands::Rename {
                 old_mod_name,
                 new_mod_name,
             } => {
@@ -534,7 +536,7 @@ pub fn list_downloaded_files(download_dir: &Path, cache_dir: &Path) -> Result<()
         ]);
     }
 
-    log::info!("{table}");
+    log::info!("\n{table}");
     Ok(())
 }
 
@@ -663,7 +665,7 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
         ]);
     }
 
-    log::info!("{table}");
+    log::info!("\n{table}");
 
     Ok(())
 }
@@ -697,7 +699,7 @@ pub fn show_mod_status(md: &Mod, mod_list: &[Mod]) -> Result<()> {
             .unwrap_or("<Unknown>".to_owned()),
     ]);
 
-    log::info!("{table}");
+    log::info!("\n{table}");
 
     if let Some(conflict) = conflict_list_mod.get(&md.name().to_string()) {
         let mut table = create_table(vec![
@@ -744,7 +746,7 @@ pub fn show_mod_status(md: &Mod, mod_list: &[Mod]) -> Result<()> {
         }
 
         log::info!("");
-        log::info!("{table}");
+        log::info!("\n{table}");
     }
 
     Ok(())
@@ -801,6 +803,6 @@ pub fn show_legenda() -> Result<()> {
         Cell::new("Mod is disabled.").fg(color),
     ]);
 
-    log::info!("{table}");
+    log::info!("\n{table}");
     Ok(())
 }
