@@ -4,7 +4,9 @@ mod enable;
 mod modlist;
 
 use std::{
+    ffi::OsString,
     fmt::Display,
+    fs::copy,
     path::{Path, PathBuf},
 };
 
@@ -54,6 +56,11 @@ pub enum Subcommands {
     },
     UpdateCustomMod {
         name: String,
+    },
+    CopyToCustomMod {
+        origin_mod: String,
+        custom_mod: String,
+        file_name: String,
     },
     Disable {
         name: String,
@@ -105,6 +112,9 @@ pub enum Subcommands {
     Show {
         name: String,
     },
+    ShowFiles {
+        name: String,
+    },
     ShowLegenda,
     ShowConfig,
 }
@@ -134,8 +144,10 @@ impl Subcommands {
                     &name,
                     origin.display()
                 );
-                ModType::custom_mod()
+                let mut manifest = ModType::custom_mod()
                     .create_manifest(&settings.cache_dir(), &PathBuf::from(name))?;
+                manifest.set_priority(10000);
+                manifest.write_manifest(&settings.cache_dir())?;
                 Ok(())
             }
             Subcommands::UpdateCustomMod { name } => {
@@ -148,7 +160,49 @@ impl Subcommands {
                     new_mod.set_priority(old_mod.priority());
                     if old_mod.mod_state().is_enabled() {
                         new_mod.enable(&settings.cache_dir(), &settings.game_dir())?;
+                    } else {
+                        new_mod.write_manifest(&settings.cache_dir())?;
                     }
+                }
+                Ok(())
+            }
+            Subcommands::CopyToCustomMod {
+                origin_mod,
+                custom_mod,
+                file_name,
+            } => {
+                let mod_list = gather_mods(&settings.cache_dir())?;
+                if let Some(origin_mod) = find_mod(&mod_list, &origin_mod) {
+                    if let Some(custom_mod) = find_mod(&mod_list, &custom_mod) {
+                        let walker = WalkDir::new(&origin_mod.manifest_dir())
+                            .min_depth(1)
+                            .max_depth(usize::MAX)
+                            .follow_links(false)
+                            .same_file_system(true)
+                            .contents_first(false);
+
+                        let mut walker = walker
+                            .into_iter()
+                            .filter_entry(|f| f.file_name().eq(&OsString::from(&file_name)));
+                        if let Some(file) = walker.next() {
+                            let file = file?;
+                            let file = file.path().to_path_buf();
+                            let mut destination = custom_mod.manifest_dir().to_path_buf();
+                            destination.push(file.strip_prefix(origin_mod.manifest_dir()).unwrap());
+                            log::trace!("Copy {} -> {}", file.display(), destination.display());
+                            copy(file, destination.as_path())?;
+                            log::info!(
+                                "Copied '{}' '{}' -> '{}'",
+                                file_name,
+                                origin_mod.name(),
+                                custom_mod.name()
+                            );
+                        }
+                    } else {
+                        log::info!("Mod '{}' could not be found", custom_mod);
+                    }
+                } else {
+                    log::info!("Mod '{}' could not be found", origin_mod);
                 }
                 Ok(())
             }
@@ -173,6 +227,17 @@ impl Subcommands {
             }
             Subcommands::List => list_mods(&settings.cache_dir()),
             Subcommands::Show { name } => show_mod(&settings.cache_dir(), &name),
+            Subcommands::ShowFiles { name } => {
+                let mod_list = gather_mods(&settings.cache_dir())?;
+                if let Some(manifest) = find_mod(&mod_list, &name) {
+                    for f in manifest.dest_files() {
+                        log::info!("{f}");
+                    }
+                } else {
+                    log::info!("Mod '{}' could not be found", name);
+                }
+                Ok(())
+            }
             Subcommands::EnableAll => {
                 enable::enable_all(&settings.cache_dir(), &settings.game_dir())?;
                 list_mods(&settings.cache_dir())

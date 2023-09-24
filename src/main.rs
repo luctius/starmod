@@ -38,7 +38,8 @@ mod settings;
 use settings::{LogLevel, Settings};
 use shadow_rs::shadow;
 use simplelog::{
-    ColorChoice, CombinedLogger, Config, LevelFilter, TermLogger, TerminalMode, WriteLogger,
+    ColorChoice, CombinedLogger, Config, ConfigBuilder, FormatItem, LevelFilter, TermLogger,
+    TerminalMode, WriteLogger,
 };
 
 use crate::settings::SettingErrors;
@@ -68,7 +69,7 @@ pub fn main() -> Result<()> {
         CombinedLogger::init(vec![
             TermLogger::new(
                 args.verbose.into(),
-                Config::default(),
+                ConfigBuilder::new().set_time_format_custom(&[]).build(),
                 TerminalMode::Mixed,
                 ColorChoice::Auto,
             ),

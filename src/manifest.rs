@@ -367,7 +367,7 @@ impl Manifest {
         let ext_vec = if let Some(ext) = ext {
             vec![ext]
         } else {
-            vec!["ini", "json", "yaml", "xml"]
+            vec!["ini", "json", "yaml", "xml", "config", "toml"]
         };
 
         for f in self.origin_files() {
