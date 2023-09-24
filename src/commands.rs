@@ -138,8 +138,6 @@ impl Subcommands {
                         .to_string()
                 });
                 let destination = settings.cache_dir().join(&name);
-                dbg!(&name);
-                dbg!(&destination);
                 std::os::unix::fs::symlink(&origin, &destination)?;
                 log::info!(
                     "Creating custom mod {} (link from {})",
@@ -187,8 +185,6 @@ impl Subcommands {
                                 .join(custom_mod.manifest_dir())
                                 .join(file_name);
 
-                            dbg!(&origin);
-                            dbg!(&destination);
                             copy(origin, destination)?;
 
                             let mut new_mod = ModKind::Custom.create_mod(
