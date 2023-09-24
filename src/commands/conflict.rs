@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 
-use crate::manifest::Manifest;
+use crate::mods::Mod;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Conflicts {
@@ -22,12 +22,12 @@ impl Conflicts {
     }
 }
 
-pub fn conflict_list_by_file(mods: &[Manifest]) -> Result<HashMap<String, Vec<String>>> {
+pub fn conflict_list_by_file(mods: &[Mod]) -> Result<HashMap<String, Vec<String>>> {
     let mut all_files = HashMap::new();
 
     // populate with all files
     mods.iter().for_each(|m| {
-        if m.mod_state().is_enabled() {
+        if m.is_enabled() {
             m.dest_files().iter().for_each(|f| {
                 all_files.insert(f.clone(), Vec::new());
             })
@@ -36,7 +36,7 @@ pub fn conflict_list_by_file(mods: &[Manifest]) -> Result<HashMap<String, Vec<St
 
     // insert conflicting mods
     mods.iter().for_each(|m| {
-        if m.mod_state().is_enabled() {
+        if m.is_enabled() {
             m.dest_files().iter().for_each(|f| {
                 if let Some(v) = all_files.get_mut(f) {
                     v.push(m.name().to_string());
@@ -51,7 +51,7 @@ pub fn conflict_list_by_file(mods: &[Manifest]) -> Result<HashMap<String, Vec<St
     Ok(all_files)
 }
 
-pub fn conflict_list_by_mod(mods: &[Manifest]) -> Result<HashMap<String, Conflicts>> {
+pub fn conflict_list_by_mod(mods: &[Mod]) -> Result<HashMap<String, Conflicts>> {
     let list = conflict_list_by_file(mods)?;
 
     let mut mods_conflicts = HashMap::new();

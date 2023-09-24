@@ -6,11 +6,11 @@ use walkdir::WalkDir;
 use crate::{
     dmodman::{DmodMan, DMODMAN_EXTENTION},
     manifest::{InstallFile, Manifest},
-    mods::ModType,
+    mods::ModKind,
 };
 
 pub fn create_loader_manifest(
-    mod_type: ModType,
+    mod_kind: ModKind,
     cache_dir: &Path,
     mod_dir: &Path,
 ) -> Result<Manifest> {
@@ -85,8 +85,8 @@ pub fn create_loader_manifest(
         name,
         nexus_id,
         version,
-        mod_type,
         files,
         disabled_files,
+        mod_kind,
     ))
 }

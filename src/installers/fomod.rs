@@ -21,13 +21,11 @@ use crate::{
         InstallerError,
     },
     manifest::{InstallFile, Manifest},
-    mods::ModType,
+    mods::ModKind,
 };
 
-use super::DATA_DIR_NAME;
-
 pub fn create_fomod_manifest(
-    mod_type: ModType,
+    mod_kind: ModKind,
     cache_dir: &Path,
     mod_dir: &Path,
 ) -> Result<Manifest> {
@@ -156,9 +154,9 @@ pub fn create_fomod_manifest(
         name,
         nexus_id,
         version,
-        mod_type,
         files,
         Vec::new(),
+        mod_kind,
     ))
 }
 

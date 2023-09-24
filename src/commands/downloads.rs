@@ -5,7 +5,10 @@ use std::{
 };
 
 use crate::{
-    decompress::SupportedArchives, dmodman::DMODMAN_EXTENTION, manifest::Manifest, mods::ModType,
+    decompress::SupportedArchives,
+    dmodman::DMODMAN_EXTENTION,
+    manifest::Manifest,
+    mods::{Mod, ModKind},
 };
 
 use anyhow::Result;
@@ -59,17 +62,18 @@ fn extract_downloaded_file(
     archive_type: SupportedArchives,
     file: OsString,
 ) -> Result<()> {
-    let mut download_file = PathBuf::from(download_dir);
-    download_file.push(file.clone());
-    let mut archive = PathBuf::from(cache_dir);
-
-    log::info!("Extracting {}", file.to_string_lossy());
-
     //destination:
     //Force utf-8 compatible strings, in lower-case, here to simplify futher code.
-    let file = file.to_string_lossy().to_string().to_lowercase();
-    archive.push(file.clone());
-    archive.set_extension("");
+    let file = file.to_string_lossy().to_string();
+
+    let download_file = PathBuf::from(download_dir).join(&file);
+
+    log::info!("Extracting {}", file);
+
+    let file = file.to_lowercase();
+    let archive = PathBuf::from(cache_dir)
+        .join(file.clone())
+        .with_extension("");
 
     let ext = download_file.extension();
     let dmodman_file = download_file.with_extension(&format!(
@@ -79,7 +83,7 @@ fn extract_downloaded_file(
 
     //TODO use dmodman file to verify if file belongs to our current game.
 
-    let mut name = PathBuf::from(file.clone());
+    let mut name = PathBuf::from(file);
     name.set_extension("");
 
     if metadata(&archive).map(|m| m.is_dir()).unwrap_or(false)
@@ -101,7 +105,7 @@ fn extract_downloaded_file(
             }
         }
 
-        log::info!(
+        log::trace!(
             "extracting {} -> {}",
             download_file.display(),
             archive.display()
@@ -124,9 +128,8 @@ fn extract_downloaded_file(
             std::fs::copy(&dmodman_file, &archive_dmodman)?;
         }
 
-        let mod_type = ModType::detect_mod_type(&cache_dir, &name)?;
-        let manifest = mod_type.create_manifest(&cache_dir, &name)?;
-        manifest.write_manifest(cache_dir)?;
+        let mod_kind = ModKind::detect_mod_type(&cache_dir, &name)?;
+        let _md = mod_kind.create_mod(&cache_dir, &name)?;
     }
 
     Ok(())

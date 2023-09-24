@@ -1,18 +1,18 @@
 use std::{
+    cmp::Ordering,
     fmt::Display,
-    fs::{read_link, remove_dir, remove_dir_all, remove_file, rename, DirBuilder, File},
+    fs::{remove_dir_all, remove_file, File},
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
 };
 
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
-use walkdir::WalkDir;
 
 use crate::{
     dmodman::DMODMAN_EXTENTION,
     installers::{DATA_DIR_NAME, TEXTURES_DIR_NAME},
-    mods::ModType,
+    mods::ModKind,
 };
 
 //TODO: replace PathBuf with something that is ressilient to deserialisation of non-utf8 characters
@@ -30,9 +30,6 @@ impl ModState {
             Self::Enabled => true,
             Self::Disabled => false,
         }
-    }
-    pub fn is_disabled(&self) -> bool {
-        !self.is_enabled()
     }
 }
 impl From<bool> for ModState {
@@ -113,8 +110,8 @@ pub struct Manifest {
     name: String,
     version: Option<String>,
     nexus_id: Option<u32>,
-    mod_type: ModType,
     mod_state: ModState,
+    mod_kind: ModKind,
     files: Vec<InstallFile>,
     disabled_files: Vec<InstallFile>,
     priority: isize,
@@ -125,20 +122,20 @@ impl Manifest {
         name: String,
         nexus_id: Option<u32>,
         version: Option<String>,
-        mod_type: ModType,
         files: Vec<InstallFile>,
         disabled_files: Vec<InstallFile>,
+        mod_kind: ModKind,
     ) -> Self {
         let s = Self {
             manifest_dir: manifest_dir.to_path_buf(),
             name,
             nexus_id,
             version,
-            mod_type,
             files,
             disabled_files,
             mod_state: ModState::Disabled,
             priority: 0,
+            mod_kind,
         };
         s
     }
@@ -146,33 +143,34 @@ impl Manifest {
         self.priority = priority;
     }
     pub fn from_file(cache_dir: &Path, archive: &Path) -> Result<Self> {
-        let mut manifest_file = PathBuf::from(cache_dir);
-        manifest_file.push(archive);
-        manifest_file.set_extension(MANIFEST_EXTENTION);
+        let manifest_file = PathBuf::from(cache_dir)
+            .join(archive)
+            .with_extension(MANIFEST_EXTENTION);
 
         let file = File::open(manifest_file)?;
         Self::try_from(file)
     }
 
     pub fn write_manifest(&self, cache_dir: &Path) -> Result<()> {
-        let mut path = PathBuf::from(cache_dir);
-        path.push(&self.manifest_dir);
-        path.set_extension(MANIFEST_EXTENTION);
+        let path = PathBuf::from(cache_dir)
+            .join(self.manifest_dir.file_stem().unwrap())
+            .with_extension(MANIFEST_EXTENTION);
 
-        if path.exists() {
-            remove_file(&path)?;
-        }
+        // if path.exists() {
+        //     log::trace!("Removing manifest file '{}' before update.", path.display());
+        //     remove_file(&path)?;
+        // }
 
         let mut file = File::create(&path)?;
 
         let serialized =
             ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default()).unwrap();
+        log::trace!("Updating manifest file '{}'.", path.display());
         file.write_all(serialized.as_bytes())?;
         Ok(())
     }
     pub fn remove(&self, cache_dir: &Path) -> Result<()> {
-        let mut path = PathBuf::from(cache_dir);
-        path.push(&self.manifest_dir);
+        let mut path = PathBuf::from(cache_dir).join(&self.manifest_dir);
         remove_dir_all(&path)?;
         path.set_extension(MANIFEST_EXTENTION);
         remove_file(&path)?;
@@ -193,150 +191,23 @@ impl Manifest {
     pub fn set_name(&mut self, name: String) {
         self.name = name
     }
+    pub fn set_enabled(&mut self) {
+        self.mod_state = ModState::Enabled;
+    }
+    pub fn set_disabled(&mut self) {
+        self.mod_state = ModState::Disabled;
+    }
     pub fn nexus_id(&self) -> Option<u32> {
         self.nexus_id
     }
     pub fn version(&self) -> Option<&str> {
         self.version.as_deref()
     }
-    pub fn mod_type(&self) -> &ModType {
-        &self.mod_type
-    }
     pub fn mod_state(&self) -> ModState {
         self.mod_state
     }
-    pub fn enable(&mut self, cache_dir: &Path, game_dir: &Path) -> Result<()> {
-        if self.mod_state.is_enabled() {
-            return Ok(());
-        }
-        if self.priority < 0 {
-            self.disable(cache_dir, game_dir)?;
-            return Ok(());
-        }
-
-        log::trace!("Enabling {}", self.name);
-
-        let cache_dir = PathBuf::from(cache_dir);
-        let game_dir = PathBuf::from(game_dir);
-
-        for (of, df) in self.origin_files().iter().zip(self.dest_files().iter()) {
-            let origin = {
-                let mut cache_dir = cache_dir.clone();
-                cache_dir.push(of);
-                cache_dir
-            };
-
-            let destination = {
-                let mut game_dir = game_dir.clone();
-                game_dir.push(PathBuf::from(df));
-                game_dir
-            };
-
-            //create intermediate directories
-            DirBuilder::new()
-                .recursive(true)
-                .create(destination.parent().unwrap())?;
-
-            // Remove existing symlinks which point back to our archive dir
-            // This ensures that the last mod wins, but we should do conflict
-            // detection and resolution before this, so we can inform the user.
-            if destination.is_symlink() {
-                let target = read_link(&destination)?;
-
-                if target.starts_with(&cache_dir) {
-                    remove_file(&destination)?;
-                    log::debug!(
-                        "overrule {} ({} > {})",
-                        destination.display(),
-                        origin.display(),
-                        target.display()
-                    );
-                } else {
-                    let bkp_destination = destination.with_file_name(format!(
-                        "{}.starmod_bkp",
-                        destination
-                            .extension()
-                            .map(|s| s.to_str())
-                            .flatten()
-                            .unwrap_or_default()
-                    ));
-                    log::info!(
-                        "renaming foreign file from {} -> {}",
-                        destination.display(),
-                        bkp_destination.display()
-                    );
-                    rename(&destination, bkp_destination)?;
-                }
-            }
-
-            std::os::unix::fs::symlink(&origin, &destination)?;
-
-            log::trace!("link {} to {}", origin.display(), destination.display());
-        }
-
-        self.mod_state = ModState::Enabled;
-        log::trace!("Enabled {}", self.name);
-
-        Ok(())
-    }
-    pub fn disable(&mut self, cache_dir: &Path, game_dir: &Path) -> Result<()> {
-        if self.mod_state.is_disabled() {
-            return Ok(());
-        }
-
-        log::trace!("Disabling {}", self.name);
-
-        let cache_dir = PathBuf::from(cache_dir);
-        let game_dir = PathBuf::from(game_dir);
-
-        for (of, df) in self.origin_files().iter().zip(self.dest_files().iter()) {
-            let origin = {
-                let mut cache_dir = cache_dir.clone();
-                cache_dir.push(of);
-                cache_dir
-            };
-            let destination = {
-                let mut game_dir = game_dir.clone();
-                game_dir.push(PathBuf::from(df));
-                game_dir
-            };
-
-            if destination.is_file()
-                && destination.is_symlink()
-                && origin == read_link(&destination)?
-            {
-                remove_file(&destination)?;
-                log::trace!("removed {} -> {}", destination.display(), origin.display());
-
-                //TODO: move backup file back in place
-            } else {
-                log::debug!("passing-over {}", destination.display());
-            }
-        }
-
-        //TODO: this could be optimised
-        // right now it will after every disable try to delete
-        // all directories in the game dir who are empty.
-        let walker = WalkDir::new(&game_dir)
-            .min_depth(1)
-            .max_depth(usize::MAX)
-            .follow_links(false)
-            .same_file_system(true)
-            .contents_first(false);
-
-        for entry in walker {
-            let entry = entry?;
-            let entry_path = entry.path();
-
-            if entry_path.is_dir() {
-                let _ = remove_dir(entry_path);
-            }
-        }
-
-        self.mod_state = ModState::Disabled;
-        log::trace!("Disabled {}", self.name);
-
-        Ok(())
+    pub fn mod_kind(&self) -> ModKind {
+        self.mod_kind
     }
     pub fn dest_files(&self) -> Vec<String> {
         let mut dest_files = Vec::with_capacity(self.files.len());
@@ -349,11 +220,7 @@ impl Manifest {
         let mut origin_files = Vec::with_capacity(self.files.len());
         for f in &self.files {
             let origin = f.source.as_path();
-            let origin = {
-                let mut o = self.manifest_dir.to_path_buf();
-                o.push(origin);
-                o
-            };
+            let origin = self.manifest_dir.to_path_buf().join(origin);
             origin_files.push(origin)
         }
         origin_files
@@ -390,8 +257,36 @@ impl TryFrom<File> for Manifest {
         let mut contents = String::new();
         buf_reader.read_to_string(&mut contents)?;
 
-        let manifest = ron::from_str(&contents)?;
+        let manifest: Manifest = ron::from_str(&contents)?;
 
+        log::trace!("Opening manifest: {}", manifest.name());
         Ok(manifest)
     }
 }
+impl PartialOrd for Manifest {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
+impl Ord for Manifest {
+    fn cmp(&self, other: &Self) -> Ordering {
+        //Order around priority, or if equal around alfabethic order
+        let o = self.priority().cmp(&other.priority());
+        if o == Ordering::Equal {
+            self.name().cmp(other.name())
+        } else {
+            o
+        }
+    }
+}
+impl PartialEq for Manifest {
+    fn eq(&self, other: &Self) -> bool {
+        self.name.eq(&other.name)
+            && self.version.eq(&other.version)
+            && self.nexus_id.eq(&other.nexus_id)
+            && self.manifest_dir.eq(&other.manifest_dir)
+            && self.mod_state.eq(&other.mod_state)
+            && self.mod_kind.eq(&other.mod_kind)
+    }
+}
+impl Eq for Manifest {}

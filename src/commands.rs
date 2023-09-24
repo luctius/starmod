@@ -17,8 +17,7 @@ use walkdir::WalkDir;
 
 use crate::{
     commands::conflict::{conflict_list_by_file, conflict_list_by_mod},
-    manifest::Manifest,
-    mods::ModType,
+    mods::{Mod, ModKind},
     settings::{create_table, SettingErrors},
     Settings,
 };
@@ -105,6 +104,10 @@ pub enum Subcommands {
         #[arg(short, long)]
         loader: bool,
     },
+    SetPrio {
+        name: String,
+        priority: isize,
+    },
     SetPriority {
         name: String,
         priority: isize,
@@ -144,10 +147,9 @@ impl Subcommands {
                     &name,
                     origin.display()
                 );
-                let mut manifest = ModType::custom_mod()
-                    .create_manifest(&settings.cache_dir(), &PathBuf::from(name))?;
-                manifest.set_priority(10000);
-                manifest.write_manifest(&settings.cache_dir())?;
+                let mut manifest =
+                    ModKind::Custom.create_mod(&settings.cache_dir(), &PathBuf::from(name))?;
+                manifest.set_priority(10000)?;
                 Ok(())
             }
             Subcommands::UpdateCustomMod { name } => {
@@ -155,13 +157,11 @@ impl Subcommands {
                 if let Some(old_mod) = find_mod(&mod_list, &name) {
                     log::info!("Updating mod '{}'", old_mod.name());
                     let name = old_mod.name();
-                    let mut new_mod = ModType::custom_mod()
-                        .create_manifest(&settings.cache_dir(), &PathBuf::from(name))?;
-                    new_mod.set_priority(old_mod.priority());
-                    if old_mod.mod_state().is_enabled() {
+                    let mut new_mod =
+                        ModKind::Custom.create_mod(&settings.cache_dir(), &PathBuf::from(name))?;
+                    new_mod.set_priority(old_mod.priority())?;
+                    if old_mod.is_enabled() {
                         new_mod.enable(&settings.cache_dir(), &settings.game_dir())?;
-                    } else {
-                        new_mod.write_manifest(&settings.cache_dir())?;
                     }
                 }
                 Ok(())
@@ -176,9 +176,6 @@ impl Subcommands {
                     if let Some(custom_mod) = find_mod(&mod_list, &custom_mod) {
                         let origin_dir = settings.cache_dir().join(origin_mod.manifest_dir());
                         let mut destination = settings.cache_dir().join(custom_mod.manifest_dir());
-
-                        dbg!(&origin_dir);
-                        dbg!(&destination);
 
                         let walker = WalkDir::new(&origin_dir)
                             .min_depth(1)
@@ -195,7 +192,7 @@ impl Subcommands {
                             let file = file.path().to_path_buf();
                             destination.push(file.strip_prefix(&origin_dir).unwrap());
                             log::trace!("Copy {} -> {}", file.display(), destination.display());
-                            // copy(file, destination.as_path())?;
+                            copy(file, destination.as_path())?;
                             log::info!(
                                 "Copied '{}' '{}' -> '{}'",
                                 file_name,
@@ -300,10 +297,10 @@ impl Subcommands {
             }
             Subcommands::Remove { name } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some(mut manifest) = find_mod(&mod_list, &name) {
-                    manifest.disable(&settings.cache_dir(), &settings.game_dir())?;
-                    manifest.remove(&settings.cache_dir())?;
-                    log::info!("Removed mod '{}'", manifest.name());
+                if let Some(mut md) = find_mod(&mod_list, &name) {
+                    md.disable(&settings.cache_dir(), &settings.game_dir())?;
+                    md.remove(&settings.cache_dir())?;
+                    log::info!("Removed mod '{}'", md.name());
                     list_mods(&settings.cache_dir())?;
                 } else {
                     log::warn!("Mod '{name}' not found.")
@@ -312,14 +309,14 @@ impl Subcommands {
             }
             Subcommands::Run { loader } => run_game(&settings, loader),
             Subcommands::ShowLegenda => show_legenda(),
-            Subcommands::SetPriority { name, priority } => {
+            Subcommands::SetPrio { name, priority }
+            | Subcommands::SetPriority { name, priority } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(mut m) = find_mod(&mod_list, &name) {
-                    m.set_priority(priority);
+                    m.set_priority(priority)?;
                     if priority < 0 {
                         m.disable(&settings.cache_dir(), &settings.game_dir())?;
                     }
-                    m.write_manifest(&settings.cache_dir())?;
                     list_mods(&settings.cache_dir())?;
                 } else {
                     log::warn!("Mod '{name}' not found.")
@@ -333,10 +330,8 @@ impl Subcommands {
                     m.remove(&settings.cache_dir())?;
 
                     let mod_type =
-                        ModType::detect_mod_type(&settings.cache_dir(), &m.manifest_dir())?;
-                    let manifest =
-                        mod_type.create_manifest(&settings.cache_dir(), &m.manifest_dir())?;
-                    manifest.write_manifest(&settings.cache_dir())?;
+                        ModKind::detect_mod_type(&settings.cache_dir(), &m.manifest_dir())?;
+                    mod_type.create_mod(&settings.cache_dir(), &m.manifest_dir())?;
                 } else {
                     log::warn!("Mod '{name}' not found.")
                 }
@@ -344,7 +339,7 @@ impl Subcommands {
             }
             Subcommands::ReEnableAll {} => {
                 let mut mod_list = gather_mods(&settings.cache_dir())?;
-                mod_list.retain(|m| m.mod_state().is_enabled());
+                mod_list.retain(|m| m.is_enabled());
                 for manifest in mod_list.iter_mut() {
                     manifest.disable(&settings.cache_dir(), &settings.game_dir())?;
                 }
@@ -360,8 +355,7 @@ impl Subcommands {
             } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(mut m) = find_mod(&mod_list, &old_mod_name) {
-                    m.set_name(new_mod_name);
-                    m.write_manifest(&settings.cache_dir())?;
+                    m.set_name(new_mod_name)?;
                     list_mods(&settings.cache_dir())?;
                 } else {
                     log::warn!("Mod '{old_mod_name}' not found.")
@@ -610,13 +604,13 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
         "Index", "Name", "Priority", "Status", "Version", "Nexus Id", "Mod Type",
     ]);
 
-    for (idx, manifest) in mod_list.iter().enumerate() {
+    for (idx, md) in mod_list.iter().enumerate() {
         let is_loser = conflict_list
-            .get(&manifest.name().to_string())
+            .get(&md.name().to_string())
             .map(|c| !c.losing_to().is_empty())
             .unwrap_or(false);
         let is_winner = conflict_list
-            .get(&manifest.name().to_string())
+            .get(&md.name().to_string())
             .map(|c| !c.winning_over().is_empty())
             .unwrap_or(false);
 
@@ -627,10 +621,10 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
             let mut file_not_lost = false;
             let conflict_list = conflict_list_by_file(&mod_list)?;
 
-            for f in manifest.dest_files() {
+            for f in md.dest_files() {
                 if let Some(contenders) = conflict_list.get(&f) {
                     if let Some(c) = contenders.last() {
-                        if c == manifest.name() {
+                        if c == md.name() {
                             file_not_lost = true;
                         }
                     }
@@ -647,28 +641,23 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
         } else {
             tag
         };
-        let tag = if manifest.mod_state().is_enabled() {
-            tag
-        } else {
-            Tag::Disabled
-        };
+        let tag = if md.is_enabled() { tag } else { Tag::Disabled };
 
         let color = Color::from(tag);
 
         table.add_row(vec![
             Cell::new(idx.to_string()).fg(color),
-            Cell::new(manifest.name().to_string()).fg(color),
-            Cell::new(manifest.priority().to_string()).fg(color),
+            Cell::new(md.name().to_string()).fg(color),
+            Cell::new(md.priority().to_string()).fg(color),
             Cell::new(tag).fg(color),
-            Cell::new(manifest.version().unwrap_or("<Unknown>").to_string()).fg(color),
+            Cell::new(md.version().unwrap_or("<Unknown>").to_string()).fg(color),
             Cell::new(
-                manifest
-                    .nexus_id()
+                md.nexus_id()
                     .map(|nid| nid.to_string())
                     .unwrap_or("<Unknown>".to_owned()),
             )
             .fg(color),
-            Cell::new(manifest.mod_type().to_string()).fg(color),
+            Cell::new(md.kind().to_string()).fg(color),
         ]);
     }
 
@@ -688,7 +677,7 @@ pub fn show_mod(cache_dir: &Path, mod_name: &str) -> Result<()> {
     Ok(())
 }
 
-pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()> {
+pub fn show_mod_status(md: &Mod, mod_list: &[Mod]) -> Result<()> {
     let conflict_list_file = conflict_list_by_file(&mod_list)?;
     let conflict_list_mod = conflict_list_by_mod(&mod_list)?;
 
@@ -696,20 +685,19 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
         "Name", "Priority", "Status", "Mod Type", "Version", "Nexus Id",
     ]);
     table.add_row(vec![
-        manifest.name().to_string(),
-        manifest.priority().to_string(),
-        manifest.mod_state().to_string(),
-        manifest.mod_type().to_string(),
-        manifest.version().unwrap_or("<Unknown>").to_string(),
-        manifest
-            .nexus_id()
+        md.name().to_string(),
+        md.priority().to_string(),
+        md.mod_state().to_string(),
+        md.kind().to_string(),
+        md.version().unwrap_or("<Unknown>").to_string(),
+        md.nexus_id()
             .map(|nid| nid.to_string())
             .unwrap_or("<Unknown>".to_owned()),
     ]);
 
     log::info!("{table}");
 
-    if let Some(conflict) = conflict_list_mod.get(&manifest.name().to_string()) {
+    if let Some(conflict) = conflict_list_mod.get(&md.name().to_string()) {
         let mut table = create_table(vec![
             "Conflicting file",
             "This mod overwrites",
@@ -723,7 +711,7 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
             if let Some(contenders) = conflict_list_file.get(f) {
                 let mut found_self = false;
                 for contender in contenders {
-                    if contender == manifest.name() {
+                    if contender == md.name() {
                         found_self = true;
                     } else if !found_self {
                         losers.push(contender.to_owned());

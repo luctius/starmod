@@ -99,7 +99,8 @@ pub fn main() -> Result<()> {
         }
     } else {
         let cmd = args.command.unwrap_or(Subcommands::List);
-        cmd.execute(&settings).unwrap();
+        let r = cmd.execute(&settings);
+        r.unwrap();
     }
 
     Ok(())
