@@ -6,7 +6,7 @@ use walkdir::WalkDir;
 use crate::{
     dmodman::{DmodMan, DMODMAN_EXTENTION},
     manifest::{InstallFile, Manifest},
-    mod_types::ModType,
+    mods::ModType,
 };
 
 pub fn create_loader_manifest(
@@ -44,10 +44,10 @@ pub fn create_loader_manifest(
                             .to_path_buf();
                         dbg!(&file);
 
-                        files.push(dbg!(InstallFile {
-                            destination: file.file_name().unwrap().to_string_lossy().to_string(),
-                            source: file,
-                        }));
+                        files.push(dbg!(InstallFile::new(
+                            file.clone(),
+                            file.file_name().unwrap().to_string_lossy().to_string(),
+                        )));
                     }
                     _ => (),
                 }
@@ -57,7 +57,7 @@ pub fn create_loader_manifest(
 
     // Disable all files containing 'readme' in the name
     files.retain(|f: &InstallFile| {
-        if f.source
+        if f.source()
             .file_name()
             .unwrap()
             .to_str()

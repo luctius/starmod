@@ -5,8 +5,7 @@ use std::{
 };
 
 use crate::{
-    decompress::SupportedArchives, dmodman::DMODMAN_EXTENTION, manifest::Manifest,
-    mod_types::ModType,
+    decompress::SupportedArchives, dmodman::DMODMAN_EXTENTION, manifest::Manifest, mods::ModType,
 };
 
 use anyhow::Result;
@@ -63,6 +62,8 @@ fn extract_downloaded_file(
     let mut download_file = PathBuf::from(download_dir);
     download_file.push(file.clone());
     let mut archive = PathBuf::from(cache_dir);
+
+    log::info!("Extracting {}", file.to_string_lossy());
 
     //destination:
     //Force utf-8 compatible strings, in lower-case, here to simplify futher code.

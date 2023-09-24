@@ -12,7 +12,7 @@ use walkdir::WalkDir;
 use crate::{
     dmodman::DMODMAN_EXTENTION,
     installers::{DATA_DIR_NAME, TEXTURES_DIR_NAME},
-    mod_types::ModType,
+    mods::ModType,
 };
 
 //TODO: replace PathBuf with something that is ressilient to deserialisation of non-utf8 characters
@@ -54,8 +54,8 @@ impl Display for ModState {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct InstallFile {
-    pub source: PathBuf,
-    pub destination: String,
+    source: PathBuf,
+    destination: String,
 }
 impl InstallFile {
     pub fn new(source: PathBuf, destination: String) -> Self {
@@ -73,6 +73,12 @@ impl InstallFile {
                     .to_lowercase()
             ),
         }
+    }
+    pub fn source(&self) -> &Path {
+        &self.source
+    }
+    pub fn destination(&self) -> &str {
+        &self.destination
     }
 }
 impl From<PathBuf> for InstallFile {
@@ -208,6 +214,8 @@ impl Manifest {
             return Ok(());
         }
 
+        log::trace!("Enabling {}", self.name);
+
         let cache_dir = PathBuf::from(cache_dir);
         let game_dir = PathBuf::from(game_dir);
 
@@ -267,6 +275,7 @@ impl Manifest {
         }
 
         self.mod_state = ModState::Enabled;
+        log::trace!("Enabled {}", self.name);
 
         Ok(())
     }
@@ -274,6 +283,8 @@ impl Manifest {
         if self.mod_state.is_disabled() {
             return Ok(());
         }
+
+        log::trace!("Disabling {}", self.name);
 
         let cache_dir = PathBuf::from(cache_dir);
         let game_dir = PathBuf::from(game_dir);
@@ -323,6 +334,7 @@ impl Manifest {
         }
 
         self.mod_state = ModState::Disabled;
+        log::trace!("Disabled {}", self.name);
 
         Ok(())
     }

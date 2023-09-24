@@ -16,6 +16,7 @@ use walkdir::WalkDir;
 use crate::{
     commands::conflict::{conflict_list_by_file, conflict_list_by_mod},
     manifest::Manifest,
+    mods::ModType,
     settings::{create_table, SettingErrors},
     Settings,
 };
@@ -46,6 +47,13 @@ pub enum Subcommands {
         // find_proton: bool,
         // #[arg(short, long)]
         // find_proton_home_dir: bool,
+    },
+    CreateCustomMod {
+        name: Option<String>,
+        origin: PathBuf,
+    },
+    UpdateCustomMod {
+        name: String,
     },
     Disable {
         name: String,
@@ -78,6 +86,10 @@ pub enum Subcommands {
     Remove {
         name: String,
     },
+    ReInstall {
+        name: String,
+    },
+    ReEnableAll,
     RenameMod {
         old_mod_name: String,
         new_mod_name: String,
@@ -99,8 +111,47 @@ pub enum Subcommands {
 impl Subcommands {
     pub fn execute(self, settings: &Settings) -> Result<()> {
         //General TODO: Be more consistant in errors, error messages warnings etc.
+        //TODO: disable and re-enable all mods when mods are added, removed or changed order
+        // To avoid certain files not being properly added or removed.
 
         match self {
+            Subcommands::CreateCustomMod { name, origin } => {
+                let name = name.unwrap_or_else(|| {
+                    origin
+                        .file_name()
+                        .map(|name| name.to_str())
+                        .flatten()
+                        .unwrap_or("custom")
+                        .to_string()
+                });
+                let destination = settings
+                    .cache_dir()
+                    .to_path_buf()
+                    .with_file_name(PathBuf::from(&name));
+                std::os::unix::fs::symlink(&origin, &destination)?;
+                log::info!(
+                    "Creating custom mod {} (link from {})",
+                    &name,
+                    origin.display()
+                );
+                ModType::custom_mod()
+                    .create_manifest(&settings.cache_dir(), &PathBuf::from(name))?;
+                Ok(())
+            }
+            Subcommands::UpdateCustomMod { name } => {
+                let mod_list = gather_mods(&settings.cache_dir())?;
+                if let Some(old_mod) = find_mod(&mod_list, &name) {
+                    log::info!("Updating mod '{}'", old_mod.name());
+                    let name = old_mod.name();
+                    let mut new_mod = ModType::custom_mod()
+                        .create_manifest(&settings.cache_dir(), &PathBuf::from(name))?;
+                    new_mod.set_priority(old_mod.priority());
+                    if old_mod.mod_state().is_enabled() {
+                        new_mod.enable(&settings.cache_dir(), &settings.game_dir())?;
+                    }
+                }
+                Ok(())
+            }
             Subcommands::ListDownloads => {
                 //TODO also show wether or not it is allready installed
                 list_downloaded_files(&settings.download_dir(), &settings.cache_dir())
@@ -154,11 +205,11 @@ impl Subcommands {
                     compat_dir,
                     editor,
                 )?;
-                println!("{}", &settings);
+                log::info!("{}", &settings);
                 Ok(())
             }
             Subcommands::ShowConfig => {
-                println!("{}", &settings);
+                log::info!("{}", &settings);
                 Ok(())
             }
             Subcommands::EditModConfig {
@@ -179,11 +230,13 @@ impl Subcommands {
             }
             Subcommands::Remove { name } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some(manifest) = find_mod(&mod_list, &name) {
+                if let Some(mut manifest) = find_mod(&mod_list, &name) {
+                    manifest.disable(&settings.cache_dir(), &settings.game_dir())?;
                     manifest.remove(&settings.cache_dir())?;
+                    log::info!("Removed mod '{}'", manifest.name());
                     list_mods(&settings.cache_dir())?;
                 } else {
-                    println!("Mod '{name}' not found.")
+                    log::info!("Mod '{name}' not found.")
                 }
                 Ok(())
             }
@@ -199,8 +252,36 @@ impl Subcommands {
                     m.write_manifest(&settings.cache_dir())?;
                     list_mods(&settings.cache_dir())?;
                 } else {
-                    println!("Mod '{name}' not found.")
+                    log::info!("Mod '{name}' not found.")
                 }
+                Ok(())
+            }
+            Subcommands::ReInstall { name } => {
+                let mod_list = gather_mods(&settings.cache_dir())?;
+                if let Some(mut m) = find_mod(&mod_list, &name) {
+                    m.disable(&settings.cache_dir(), &settings.game_dir())?;
+                    m.remove(&settings.cache_dir())?;
+
+                    let mod_type =
+                        ModType::detect_mod_type(&settings.cache_dir(), &m.manifest_dir())?;
+                    let manifest =
+                        mod_type.create_manifest(&settings.cache_dir(), &m.manifest_dir())?;
+                    manifest.write_manifest(&settings.cache_dir())?;
+                } else {
+                    log::info!("Mod '{name}' not found.")
+                }
+                Ok(())
+            }
+            Subcommands::ReEnableAll {} => {
+                let mut mod_list = gather_mods(&settings.cache_dir())?;
+                mod_list.retain(|m| m.mod_state().is_enabled());
+                for manifest in mod_list.iter_mut() {
+                    manifest.disable(&settings.cache_dir(), &settings.game_dir())?;
+                }
+                for manifest in mod_list.iter_mut() {
+                    manifest.enable(&settings.cache_dir(), &settings.game_dir())?;
+                }
+                log::info!("Mods re-enabled.");
                 Ok(())
             }
             Subcommands::RenameMod {
@@ -213,7 +294,7 @@ impl Subcommands {
                     m.write_manifest(&settings.cache_dir())?;
                     list_mods(&settings.cache_dir())?;
                 } else {
-                    println!("Mod '{old_mod_name}' not found.")
+                    log::info!("Mod '{old_mod_name}' not found.")
                 }
                 Ok(())
             }
@@ -245,15 +326,19 @@ fn run_game(settings: &Settings, loader: bool) -> Result<()> {
                     game_exe.push(settings.game().loader_name());
                 }
 
-                println!("running 'STEAM_COMPAT_DATA_PATH={} STEAM_COMPAT_CLIENT_INSTALL_PATH={} {} run {}'", compat_dir.display(), steam_dir.display(), proton_exe.display(), game_exe.display());
+                log::info!("Running 'STEAM_COMPAT_DATA_PATH={} STEAM_COMPAT_CLIENT_INSTALL_PATH={} {} run {}'", compat_dir.display(), steam_dir.display(), proton_exe.display(), game_exe.display());
 
-                std::process::Command::new(proton_exe)
+                let output = std::process::Command::new(proton_exe)
                     .arg("run")
                     // .arg("waitforexitandrun")
                     .arg(game_exe)
                     .env("STEAM_COMPAT_DATA_PATH", compat_dir)
                     .env("STEAM_COMPAT_CLIENT_INSTALL_PATH", steam_dir)
                     .output()?;
+
+                if !output.status.success() {
+                    log::info!("{:?}", output.stdout);
+                }
                 Ok(())
             } else {
                 Err(SettingErrors::NoSteamDirFound(settings.cmd_name().to_owned()).into())
@@ -298,15 +383,19 @@ fn edit_mod_config_files(
     }
 
     if !config_files_to_edit.is_empty() {
-        println!("Editing: {:?}", config_files_to_edit);
+        log::info!("Editing: {:?}", config_files_to_edit);
 
         let mut editor_cmd = std::process::Command::new(settings.editor());
         for f in config_files_to_edit {
-            editor_cmd.arg(f);
+            let _ = editor_cmd.arg(f);
         }
-        editor_cmd.spawn()?.wait()?;
+
+        let status = editor_cmd.spawn()?.wait()?;
+        if !status.success() {
+            log::info!("Editor failed with exit status: {}", status);
+        }
     } else {
-        println!("No relevant config files found.");
+        log::info!("No relevant config files found.");
     }
 
     Ok(())
@@ -344,7 +433,7 @@ fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> R
     }
 
     if !config_files_to_edit.is_empty() {
-        println!("Editing: {:?}", config_files_to_edit);
+        log::info!("Editing: {:?}", config_files_to_edit);
 
         let mut editor_cmd = std::process::Command::new(settings.editor());
         for f in config_files_to_edit {
@@ -352,7 +441,7 @@ fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> R
         }
         editor_cmd.spawn()?.wait()?;
     } else {
-        println!("No relevant config files found.");
+        log::info!("No relevant config files found.");
     }
 
     Ok(())
@@ -379,7 +468,7 @@ pub fn list_downloaded_files(download_dir: &Path, cache_dir: &Path) -> Result<()
         ]);
     }
 
-    println!("{table}");
+    log::info!("{table}");
     Ok(())
 }
 
@@ -501,19 +590,19 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
             Cell::new(manifest.name().to_string()).fg(color),
             Cell::new(manifest.priority().to_string()).fg(color),
             Cell::new(tag).fg(color),
-            Cell::new(manifest.version().unwrap_or("<None>").to_string()).fg(color),
+            Cell::new(manifest.version().unwrap_or("<Unknown>").to_string()).fg(color),
             Cell::new(
                 manifest
                     .nexus_id()
                     .map(|nid| nid.to_string())
-                    .unwrap_or("<None>".to_owned()),
+                    .unwrap_or("<Unknown>".to_owned()),
             )
             .fg(color),
             Cell::new(manifest.mod_type().to_string()).fg(color),
         ]);
     }
 
-    println!("{table}");
+    log::info!("{table}");
 
     Ok(())
 }
@@ -523,7 +612,7 @@ pub fn show_mod(cache_dir: &Path, mod_name: &str) -> Result<()> {
     if let Some(m) = find_mod(&mod_list, mod_name) {
         show_mod_status(&m, &mod_list)?;
     } else {
-        println!("No mod found by that name: {}", mod_name);
+        log::info!("-> No mod found by that name: {}", mod_name);
     }
 
     Ok(())
@@ -541,14 +630,14 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
         manifest.priority().to_string(),
         manifest.mod_state().to_string(),
         manifest.mod_type().to_string(),
-        manifest.version().unwrap_or("<None>").to_string(),
+        manifest.version().unwrap_or("<Unknown>").to_string(),
         manifest
             .nexus_id()
             .map(|nid| nid.to_string())
-            .unwrap_or("<None>".to_owned()),
+            .unwrap_or("<Unknown>".to_owned()),
     ]);
 
-    println!("{table}");
+    log::info!("{table}");
 
     if let Some(conflict) = conflict_list_mod.get(&manifest.name().to_string()) {
         let mut table = create_table(vec![
@@ -594,8 +683,8 @@ pub fn show_mod_status(manifest: &Manifest, mod_list: &[Manifest]) -> Result<()>
             }
         }
 
-        println!("");
-        println!("{table}");
+        log::info!("");
+        log::info!("{table}");
     }
 
     Ok(())
@@ -652,6 +741,6 @@ pub fn show_legenda() -> Result<()> {
         Cell::new("Mod is disabled.").fg(color),
     ]);
 
-    println!("{table}");
+    log::info!("{table}");
     Ok(())
 }

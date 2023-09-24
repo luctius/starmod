@@ -1,3 +1,24 @@
+#![deny(
+    nonstandard_style,
+    rust_2018_idioms,
+    future_incompatible,
+    unused_extern_crates,
+    unused_import_braces,
+    // unused_results,
+    // unused_qualifications,
+    //warnings,
+    //unused,
+    unsafe_code,
+)]
+#![warn(
+    trivial_casts,
+    trivial_numeric_casts,
+    clippy::all,
+    clippy::pedantic,
+    clippy::nursery,
+    clippy::wildcard_dependencies
+)]
+
 use std::fs::File;
 
 use anyhow::Result;
@@ -11,7 +32,7 @@ mod dmodman;
 mod game;
 mod installers;
 mod manifest;
-mod mod_types;
+mod mods;
 mod settings;
 
 use settings::{LogLevel, Settings};
@@ -28,10 +49,10 @@ shadow!(build);
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     /// Set output to verbose
-    #[arg(short, long, value_enum, default_value_t = LogLevel::Warn)]
+    #[arg(short, long, value_enum, default_value_t = LogLevel::Info)]
     verbose: LogLevel,
 
-    #[arg(short, long)]
+    #[arg(short, long, default_value_t = true)]
     term_log: bool,
 
     #[command(subcommand)]
@@ -60,7 +81,7 @@ pub fn main() -> Result<()> {
         .unwrap();
     } else {
         CombinedLogger::init(vec![WriteLogger::new(
-            LevelFilter::Info,
+            args.verbose.into(),
             Config::default(),
             File::create(settings.log_file()).unwrap(),
         )])

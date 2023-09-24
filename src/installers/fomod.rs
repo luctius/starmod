@@ -21,7 +21,7 @@ use crate::{
         InstallerError,
     },
     manifest::{InstallFile, Manifest},
-    mod_types::ModType,
+    mods::ModType,
 };
 
 use super::DATA_DIR_NAME;
@@ -178,10 +178,7 @@ impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
                     let destination = f.destination.clone().unwrap_or_else(|| String::new());
                     let source = PathBuf::from(f.source.clone().to_lowercase());
 
-                    files.push(InstallFile {
-                        destination: dbg!(destination),
-                        source,
-                    });
+                    files.push(InstallFile::new(source, dbg!(destination)));
                 }
                 fomod::FileTypeEnum::Folder(f) => {
                     let mut f = f.clone();

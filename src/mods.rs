@@ -28,21 +28,26 @@ pub enum ModType {
     FoMod,
     //Goes into the root dir
     Loader,
+    Custom,
 }
 impl ModType {
+    pub fn custom_mod() -> Self {
+        Self::Custom
+    }
     pub fn create_manifest(self, cache_dir: &Path, name: &Path) -> Result<Manifest> {
         match self {
             Self::DataMod { .. } => create_data_manifest(self, cache_dir, name),
             Self::FoMod => create_fomod_manifest(self, cache_dir, name),
             Self::Loader => create_loader_manifest(self, cache_dir, name),
+            Self::Custom => todo!(),
         }
     }
-    pub fn prefix_to_strip(&self) -> &str {
-        match self {
-            Self::FoMod | Self::Loader => "",
-            Self::DataMod { data_start } => data_start.as_str(),
-        }
-    }
+    // pub fn prefix_to_strip(&self) -> &str {
+    //     match self {
+    //         Self::FoMod | Self::Loader | Self::Custom => "",
+    //         Self::DataMod { data_start } => data_start.as_str(),
+    //     }
+    // }
     pub fn detect_mod_type(cache_dir: &Path, name: &Path) -> Result<Self> {
         let mut archive_dir = PathBuf::from(cache_dir);
         archive_dir.push(name);
@@ -155,6 +160,7 @@ impl Display for ModType {
             Self::DataMod { .. } => f.write_str("Data"),
             Self::FoMod => f.write_str("FoMod"),
             Self::Loader => f.write_str("Loader"),
+            Self::Custom => f.write_str("Custom"),
         }
     }
 }
