@@ -174,7 +174,13 @@ impl Subcommands {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(origin_mod) = find_mod(&mod_list, &origin_mod) {
                     if let Some(custom_mod) = find_mod(&mod_list, &custom_mod) {
-                        let walker = WalkDir::new(&origin_mod.manifest_dir())
+                        let origin_dir = settings.cache_dir().join(origin_mod.manifest_dir());
+                        let mut destination = settings.cache_dir().join(custom_mod.manifest_dir());
+
+                        dbg!(&origin_dir);
+                        dbg!(&destination);
+
+                        let walker = WalkDir::new(&origin_dir)
                             .min_depth(1)
                             .max_depth(usize::MAX)
                             .follow_links(false)
@@ -187,10 +193,9 @@ impl Subcommands {
                         if let Some(file) = walker.next() {
                             let file = file?;
                             let file = file.path().to_path_buf();
-                            let mut destination = custom_mod.manifest_dir().to_path_buf();
-                            destination.push(file.strip_prefix(origin_mod.manifest_dir()).unwrap());
+                            destination.push(file.strip_prefix(&origin_dir).unwrap());
                             log::trace!("Copy {} -> {}", file.display(), destination.display());
-                            copy(file, destination.as_path())?;
+                            // copy(file, destination.as_path())?;
                             log::info!(
                                 "Copied '{}' '{}' -> '{}'",
                                 file_name,
@@ -199,10 +204,10 @@ impl Subcommands {
                             );
                         }
                     } else {
-                        log::info!("Mod '{}' could not be found", custom_mod);
+                        log::warn!("Mod '{}' could not be found", custom_mod);
                     }
                 } else {
-                    log::info!("Mod '{}' could not be found", origin_mod);
+                    log::warn!("Mod '{}' could not be found", origin_mod);
                 }
                 Ok(())
             }
@@ -234,7 +239,7 @@ impl Subcommands {
                         log::info!("{f}");
                     }
                 } else {
-                    log::info!("Mod '{}' could not be found", name);
+                    log::warn!("Mod '{}' could not be found", name);
                 }
                 Ok(())
             }
@@ -301,7 +306,7 @@ impl Subcommands {
                     log::info!("Removed mod '{}'", manifest.name());
                     list_mods(&settings.cache_dir())?;
                 } else {
-                    log::info!("Mod '{name}' not found.")
+                    log::warn!("Mod '{name}' not found.")
                 }
                 Ok(())
             }
@@ -317,7 +322,7 @@ impl Subcommands {
                     m.write_manifest(&settings.cache_dir())?;
                     list_mods(&settings.cache_dir())?;
                 } else {
-                    log::info!("Mod '{name}' not found.")
+                    log::warn!("Mod '{name}' not found.")
                 }
                 Ok(())
             }
@@ -333,7 +338,7 @@ impl Subcommands {
                         mod_type.create_manifest(&settings.cache_dir(), &m.manifest_dir())?;
                     manifest.write_manifest(&settings.cache_dir())?;
                 } else {
-                    log::info!("Mod '{name}' not found.")
+                    log::warn!("Mod '{name}' not found.")
                 }
                 Ok(())
             }
@@ -359,7 +364,7 @@ impl Subcommands {
                     m.write_manifest(&settings.cache_dir())?;
                     list_mods(&settings.cache_dir())?;
                 } else {
-                    log::info!("Mod '{old_mod_name}' not found.")
+                    log::warn!("Mod '{old_mod_name}' not found.")
                 }
                 Ok(())
             }

@@ -67,6 +67,7 @@ pub fn main() -> Result<()> {
 
     if args.term_log {
         CombinedLogger::init(vec![
+            //TODO: User other logger with more customisation options.
             TermLogger::new(
                 args.verbose.into(),
                 ConfigBuilder::new().set_time_format_custom(&[]).build(),
