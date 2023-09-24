@@ -11,6 +11,7 @@ use walkdir::WalkDir;
 
 use crate::{
     installers::{
+        custom::create_custom_manifest,
         data::create_data_manifest,
         fomod::{create_fomod_manifest, FOMOD_INFO_FILE, FOMOD_MODCONFIG_FILE},
         loader::create_loader_manifest,
@@ -96,7 +97,10 @@ impl ModKind {
                 cache_dir.to_path_buf(),
                 create_loader_manifest(self, cache_dir, name)?,
             ),
-            Self::Custom => todo!(),
+            Self::Custom => Mod::Data(
+                cache_dir.to_path_buf(),
+                create_custom_manifest(self, cache_dir, name)?,
+            ),
             Self::Data => Mod::Data(cache_dir.to_path_buf(), {
                 let manifest_dir = cache_dir.join(name);
                 let mut data_path = None;

@@ -1,5 +1,6 @@
 use thiserror::Error;
 
+pub mod custom;
 pub mod data;
 pub mod fomod;
 pub mod loader;

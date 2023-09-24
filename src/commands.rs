@@ -50,8 +50,8 @@ pub enum Subcommands {
         // find_proton_home_dir: bool,
     },
     CreateCustomMod {
-        name: Option<String>,
         origin: PathBuf,
+        name: Option<String>,
     },
     UpdateCustomMod {
         name: String,
@@ -128,7 +128,7 @@ impl Subcommands {
         // To avoid certain files not being properly added or removed.
 
         match self {
-            Subcommands::CreateCustomMod { name, origin } => {
+            Subcommands::CreateCustomMod { origin, name } => {
                 let name = name.unwrap_or_else(|| {
                     origin
                         .file_name()
@@ -137,10 +137,9 @@ impl Subcommands {
                         .unwrap_or("custom")
                         .to_string()
                 });
-                let destination = settings
-                    .cache_dir()
-                    .to_path_buf()
-                    .with_file_name(PathBuf::from(&name));
+                let destination = settings.cache_dir().join(&name);
+                dbg!(&name);
+                dbg!(&destination);
                 std::os::unix::fs::symlink(&origin, &destination)?;
                 log::info!(
                     "Creating custom mod {} (link from {})",
@@ -174,30 +173,37 @@ impl Subcommands {
                 let mod_list = gather_mods(&settings.cache_dir())?;
                 if let Some(origin_mod) = find_mod(&mod_list, &origin_mod) {
                     if let Some(custom_mod) = find_mod(&mod_list, &custom_mod) {
-                        let origin_dir = settings.cache_dir().join(origin_mod.manifest_dir());
-                        let mut destination = settings.cache_dir().join(custom_mod.manifest_dir());
+                        if let Some(file) = origin_mod
+                            .origin_files()
+                            .iter()
+                            .find(|f| f.file_name().unwrap().eq(file_name.as_str()))
+                        {
+                            let origin = settings
+                                .cache_dir()
+                                // .join(origin_mod.manifest_dir())
+                                .join(file);
+                            let destination = settings
+                                .cache_dir()
+                                .join(custom_mod.manifest_dir())
+                                .join(file_name);
 
-                        let walker = WalkDir::new(&origin_dir)
-                            .min_depth(1)
-                            .max_depth(usize::MAX)
-                            .follow_links(false)
-                            .same_file_system(true)
-                            .contents_first(false);
+                            dbg!(&origin);
+                            dbg!(&destination);
+                            copy(origin, destination)?;
 
-                        let mut walker = walker
-                            .into_iter()
-                            .filter_entry(|f| f.file_name().eq(&OsString::from(&file_name)));
-                        if let Some(file) = walker.next() {
-                            let file = file?;
-                            let file = file.path().to_path_buf();
-                            destination.push(file.strip_prefix(&origin_dir).unwrap());
-                            log::trace!("Copy {} -> {}", file.display(), destination.display());
-                            copy(file, destination.as_path())?;
-                            log::info!(
-                                "Copied '{}' '{}' -> '{}'",
+                            let mut new_mod = ModKind::Custom.create_mod(
+                                &settings.cache_dir(),
+                                &PathBuf::from(custom_mod.name()),
+                            )?;
+                            new_mod.set_priority(custom_mod.priority())?;
+                            if custom_mod.is_enabled() {
+                                new_mod.enable(&settings.cache_dir(), &settings.game_dir())?;
+                            }
+                        } else {
+                            log::warn!(
+                                "File '{}' could not be found in mod '{}'.",
                                 file_name,
-                                origin_mod.name(),
-                                custom_mod.name()
+                                origin_mod.name()
                             );
                         }
                     } else {

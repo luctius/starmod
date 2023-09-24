@@ -56,19 +56,23 @@ pub struct InstallFile {
 }
 impl InstallFile {
     pub fn new(source: PathBuf, destination: String) -> Self {
+        let destination = format!(
+            "{}/{}",
+            DATA_DIR_NAME,
+            destination
+                .as_str()
+                .strip_prefix("data")
+                .unwrap_or(destination.as_str())
+                .replace("//", "/")
+                .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME))
+                .to_lowercase()
+        );
+
+        log::trace!("New InstallFile: {} -> {}", source.display(), destination);
+
         Self {
             source,
-            destination: format!(
-                "{}/{}",
-                DATA_DIR_NAME,
-                destination
-                    .as_str()
-                    .strip_prefix("data")
-                    .unwrap_or(destination.as_str())
-                    .replace("//", "/")
-                    .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME))
-                    .to_lowercase()
-            ),
+            destination,
         }
     }
     pub fn source(&self) -> &Path {
@@ -85,6 +89,7 @@ impl From<PathBuf> for InstallFile {
 }
 impl From<&Path> for InstallFile {
     fn from(p: &Path) -> Self {
+        let source = p.to_path_buf();
         let destination = format!(
             "{}/{}",
             DATA_DIR_NAME,
@@ -95,8 +100,9 @@ impl From<&Path> for InstallFile {
                 .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME))
         );
 
+        log::trace!("New InstallFile: {} -> {}", source.display(), destination);
         Self {
-            source: p.to_path_buf(),
+            source,
             destination,
         }
     }
