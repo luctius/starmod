@@ -22,7 +22,14 @@
 use std::fs::File;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Command, CommandFactory, Parser, Subcommand};
+use clap_complete::{generate, Generator, Shell};
+use flexi_logger::{detailed_format, Duplicate, FileSpec, Logger, WriteMode};
+// use clap_repl::ClapEditor;
+use shadow_rs::shadow;
+// use simplelog::{
+//     ColorChoice, CombinedLogger, Config, ConfigBuilder, TermLogger, TerminalMode, WriteLogger,
+// };
 
 //TODO: seperate into a lib
 mod commands;
@@ -36,72 +43,94 @@ mod mods;
 mod settings;
 
 use settings::{LogLevel, Settings};
-use shadow_rs::shadow;
-use simplelog::{
-    ColorChoice, CombinedLogger, Config, ConfigBuilder, FormatItem, LevelFilter, TermLogger,
-    TerminalMode, WriteLogger,
-};
 
 use crate::settings::SettingErrors;
 shadow!(build);
 
 /// Simple Starfield Modding Application
 #[derive(Parser, Debug)]
+// #[command(author, version, about, long_about = None)]
+#[command(author, version, about, multicall = true)]
+pub struct StarMod {
+    #[command(subcommand)]
+    applet: AppLet,
+}
+
+/// Simple Starfield Modding Application
+#[derive(Subcommand, Debug, Clone)]
+#[command(author, version, about, long_about = None, rename_all="lower")]
+pub enum AppLet {
+    StarMod(AppLetArgs),
+    SkyMod(AppLetArgs),
+    ObMod(AppLetArgs),
+    MorMod(AppLetArgs),
+}
+impl AppLet {
+    pub fn unwrap(self) -> AppLetArgs {
+        match self {
+            Self::MorMod(a) | Self::ObMod(a) | Self::SkyMod(a) | Self::StarMod(a) => a,
+        }
+    }
+}
+
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
-pub struct Args {
+pub struct AppLetArgs {
     /// Set output to verbose
     #[arg(short, long, value_enum, default_value_t = LogLevel::Info)]
     verbose: LogLevel,
 
-    #[arg(short, long, default_value_t = true)]
-    term_log: bool,
+    #[arg(long)]
+    generator: Option<Shell>,
 
     #[command(subcommand)]
     command: Option<Subcommands>,
 }
 
+fn log_stdout(
+    w: &mut dyn std::io::Write,
+    _now: &mut flexi_logger::DeferredNow,
+    record: &log::Record<'_>,
+) -> Result<(), std::io::Error> {
+    write!(w, "{}", record.args())
+}
+
 pub fn main() -> Result<()> {
-    let args = Args::parse();
+    let applet = StarMod::parse();
+    let args = applet.applet.unwrap();
 
-    let settings = Settings::read_config(args.verbose)?;
+    let mut settings = Settings::read_config(args.verbose)?;
 
-    if args.term_log {
-        CombinedLogger::init(vec![
-            //TODO: User other logger with more customisation options.
-            TermLogger::new(
-                args.verbose.into(),
-                ConfigBuilder::new().set_time_format_custom(&[]).build(),
-                TerminalMode::Mixed,
-                ColorChoice::Auto,
-            ),
-            WriteLogger::new(
-                args.verbose.into(),
-                Config::default(),
-                File::create(settings.log_file()).unwrap(),
-            ),
-        ])
-        .unwrap();
-    } else {
-        CombinedLogger::init(vec![WriteLogger::new(
-            args.verbose.into(),
-            Config::default(),
-            File::create(settings.log_file()).unwrap(),
-        )])
-        .unwrap();
+    let _logger = Logger::try_with_env_or_str("trace")?
+        .log_to_file(FileSpec::try_from(settings.log_file())?)
+        .write_mode(WriteMode::BufferDontFlush)
+        .duplicate_to_stdout(args.verbose.into())
+        .format_for_stdout(log_stdout)
+        .format_for_files(detailed_format)
+        .write_mode(WriteMode::Direct)
+        .start()?;
+
+    if let Some(generator) = args.generator {
+        let mut cmd = AppLetArgs::command();
+        log::info!("Generating completion file for {generator}...");
+        print_completions(generator, &mut cmd);
+        return Ok(());
     }
 
     // Only allow create-config to be run when no valid settings are found
     if !settings.valid_config() {
         if let Some(cmd @ Subcommands::UpdateConfig { .. }) = args.command {
-            cmd.execute(&settings)?;
+            cmd.execute(&mut settings)?;
         } else {
             return Err(SettingErrors::ConfigNotFound(settings.cmd_name().to_owned()).into());
         }
     } else {
-        let cmd = args.command.unwrap_or(Subcommands::List);
-        let r = cmd.execute(&settings);
-        r.unwrap();
+        args.command.unwrap_or_default().execute(&mut settings)?;
     }
 
     Ok(())
+}
+
+fn print_completions<G: Generator>(gen: G, cmd: &mut Command) {
+    generate(gen, cmd, cmd.get_name().to_string(), &mut std::io::stdout());
 }

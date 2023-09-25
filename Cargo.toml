@@ -35,10 +35,12 @@ fuzzy-matcher = "0.3"
 comfy-table = "7.0"
 encoding_rs_io = "0.1"
 read-stdin = "1.1"
-simplelog = { version = "0.12", features = ["paris"] }
+flexi_logger = "0.27.0"
 log = "0.4"
+clap_complete = "4.4"
+# clap-repl = "0.1"  # TODO: Can we use reedline-repl instead?
 
-# camino = "1.1.6" //TODO use camino instead of Path and PathBuf
+# camino = "1.1.6" # TODO use camino instead of Path and PathBuf
 # enum-kinds = "0.5.1"
 # libloadorder = "11.4.1"
 

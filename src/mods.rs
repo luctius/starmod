@@ -17,7 +17,7 @@ use crate::{
         loader::create_loader_manifest,
         InstallerError,
     },
-    manifest::{Manifest, ModState, MANIFEST_EXTENTION},
+    manifest::{InstallFile, Manifest, ModState, MANIFEST_EXTENTION},
 };
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -405,6 +405,16 @@ impl Mod {
     pub fn dest_files(&self) -> Vec<String> {
         match self {
             Self::Data(.., m) => m.dest_files(),
+        }
+    }
+    pub fn files(&self) -> &[InstallFile] {
+        match self {
+            Self::Data(.., m) => m.files(),
+        }
+    }
+    pub fn disabled_files(&self) -> &[InstallFile] {
+        match self {
+            Self::Data(.., m) => m.disabled_files(),
         }
     }
     pub fn remove(&self, cache_dir: &Path) -> Result<()> {

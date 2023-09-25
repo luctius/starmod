@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
 use clap::ValueEnum;
 use comfy_table::{presets::NOTHING, ContentArrangement, Table};
+use flexi_logger::Duplicate;
 use serde::{Deserialize, Serialize};
 use std::{
     env,
@@ -12,7 +13,7 @@ use std::{
 use thiserror::Error;
 use xdg::BaseDirectories;
 
-use simplelog::LevelFilter;
+use log::LevelFilter;
 
 use crate::{dmodman::DModManConfig, game::Game};
 
@@ -69,6 +70,18 @@ impl From<LogLevel> for LevelFilter {
         }
     }
 }
+impl From<LogLevel> for Duplicate {
+    fn from(ll: LogLevel) -> Self {
+        // Note: never log less than info, is make the application useless
+        match ll {
+            LogLevel::Error => Self::Info,
+            LogLevel::Warn => Self::Info,
+            LogLevel::Info => Self::Info,
+            LogLevel::Debug => Self::Debug,
+            LogLevel::Trace => Self::Trace,
+        }
+    }
+}
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct Settings {
@@ -76,6 +89,8 @@ pub struct Settings {
     game: Game,
     #[serde(skip_serializing, default)]
     verbosity: LogLevel,
+    #[serde(skip_serializing, default)]
+    repl_running: bool,
     cache_dir: PathBuf,
     config_path: PathBuf,
     log_path: PathBuf,
@@ -130,6 +145,8 @@ impl Settings {
             None
         };
 
+        let repl_running = true;
+
         Ok(Self {
             game,
             verbosity,
@@ -142,6 +159,7 @@ impl Settings {
             proton_dir,
             compat_dir,
             steam_dir,
+            repl_running,
         })
     }
     pub fn valid_config(&self) -> bool {
@@ -187,12 +205,19 @@ impl Settings {
     pub fn editor(&self) -> String {
         self.editor.clone().unwrap_or("xdg-open".to_owned())
     }
+    pub fn repl_running(&self) -> bool {
+        self.repl_running
+    }
+    pub fn stop_repl(&mut self) {
+        self.repl_running = false;
+    }
     pub fn read_config(verbosity: LogLevel) -> Result<Self> {
         let settings = Self::create(verbosity)?;
         if let Ok(config) = File::open(&settings.config_path) {
             let mut read_settings = Self::try_from(config)?;
             read_settings.game = settings.game;
             read_settings.verbosity = verbosity;
+            read_settings.repl_running = true;
             Ok(read_settings)
         } else {
             Ok(settings)
@@ -338,7 +363,7 @@ pub fn create_table(headers: Vec<&'static str>) -> Table {
     table
         .load_preset(NOTHING)
         .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_width(120)
+        // .set_width(120)
         .set_header(headers);
     table
 }

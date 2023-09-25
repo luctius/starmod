@@ -49,7 +49,7 @@ impl Display for ModState {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Serialize)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct InstallFile {
     source: PathBuf,
     destination: String,
@@ -103,6 +103,16 @@ impl From<&Path> for InstallFile {
             source,
             destination,
         }
+    }
+}
+impl Ord for InstallFile {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.source.cmp(&other.source)
+    }
+}
+impl PartialOrd for InstallFile {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }
 
@@ -213,6 +223,9 @@ impl Manifest {
     pub fn mod_kind(&self) -> ModKind {
         self.mod_kind
     }
+    pub fn files(&self) -> &[InstallFile] {
+        &self.files
+    }
     pub fn dest_files(&self) -> Vec<String> {
         let mut dest_files = Vec::with_capacity(self.files.len());
         for f in &self.files {
@@ -228,6 +241,9 @@ impl Manifest {
             origin_files.push(origin)
         }
         origin_files
+    }
+    pub fn disabled_files(&self) -> &[InstallFile] {
+        &self.disabled_files
     }
     pub fn priority(&self) -> isize {
         self.priority

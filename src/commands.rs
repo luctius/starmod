@@ -11,7 +11,7 @@ use std::{
 };
 
 use anyhow::Result;
-use clap::Subcommand;
+use clap::{Parser, Subcommand};
 use comfy_table::{Cell, Color};
 use walkdir::WalkDir;
 
@@ -27,7 +27,7 @@ use self::{
     modlist::{find_mod, gather_mods},
 };
 
-#[derive(Subcommand, Debug, Clone)]
+#[derive(Debug, Clone, Parser, Default)]
 pub enum Subcommands {
     UpdateConfig {
         #[arg(short, long)]
@@ -85,6 +85,7 @@ pub enum Subcommands {
         name: String,
     },
     ExtractAll,
+    #[default]
     List,
     ListDownloads,
     PurgeCache,
@@ -120,9 +121,12 @@ pub enum Subcommands {
     },
     ShowLegenda,
     ShowConfig,
+    ShowConflicts,
+    #[clap(hide = true)]
+    Quit,
 }
 impl Subcommands {
-    pub fn execute(self, settings: &Settings) -> Result<()> {
+    pub fn execute(self, settings: &mut Settings) -> Result<()> {
         //General TODO: Be more consistant in errors, error messages warnings etc.
         //TODO: disable and re-enable all mods when mods are added, removed or changed order
         // To avoid certain files not being properly added or removed.
@@ -228,19 +232,7 @@ impl Subcommands {
             }
             Subcommands::List => list_mods(&settings.cache_dir()),
             Subcommands::Show { name } => show_mod(&settings.cache_dir(), &name),
-            Subcommands::ShowFiles { name } => {
-                let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some(manifest) = find_mod(&mod_list, &name) {
-                    //TODO: Table
-                    for f in manifest.dest_files() {
-                        log::info!("{f}");
-                    }
-                    //TODO: Show Disabled Files
-                } else {
-                    log::warn!("Mod '{}' could not be found", name);
-                }
-                Ok(())
-            }
+            Subcommands::ShowFiles { name } => show_mod_files(&settings.cache_dir(), &name),
             Subcommands::EnableAll => {
                 enable::enable_all(&settings.cache_dir(), &settings.game_dir())?;
                 list_mods(&settings.cache_dir())
@@ -361,6 +353,11 @@ impl Subcommands {
                 } else {
                     log::warn!("Mod '{old_mod_name}' not found.")
                 }
+                Ok(())
+            }
+            Subcommands::ShowConflicts => show_conflicts(&settings.cache_dir()),
+            Subcommands::Quit => {
+                settings.stop_repl();
                 Ok(())
             }
         }
@@ -533,7 +530,7 @@ pub fn list_downloaded_files(download_dir: &Path, cache_dir: &Path) -> Result<()
         ]);
     }
 
-    log::info!("\n{table}");
+    log::info!("{table}");
     Ok(())
 }
 
@@ -662,7 +659,7 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
         ]);
     }
 
-    log::info!("\n{table}");
+    log::info!("{table}");
 
     Ok(())
 }
@@ -696,7 +693,7 @@ pub fn show_mod_status(md: &Mod, mod_list: &[Mod]) -> Result<()> {
             .unwrap_or("<Unknown>".to_owned()),
     ]);
 
-    log::info!("\n{table}");
+    log::info!("{table}");
 
     if let Some(conflict) = conflict_list_mod.get(&md.name().to_string()) {
         let mut table = create_table(vec![
@@ -743,7 +740,7 @@ pub fn show_mod_status(md: &Mod, mod_list: &[Mod]) -> Result<()> {
         }
 
         log::info!("");
-        log::info!("\n{table}");
+        log::info!("{table}");
     }
 
     Ok(())
@@ -800,6 +797,73 @@ pub fn show_legenda() -> Result<()> {
         Cell::new("Mod is disabled.").fg(color),
     ]);
 
-    log::info!("\n{table}");
+    log::info!("{table}");
+    Ok(())
+}
+
+pub fn show_mod_files(cache_dir: &Path, mod_name: &str) -> Result<()> {
+    let mod_list = gather_mods(cache_dir)?;
+    if let Some(m) = find_mod(&mod_list, mod_name) {
+        log::info!("File overview of {}", m.name());
+        log::info!("");
+        let mut table = create_table(vec!["File", "Destination"]);
+
+        let mut files = m.files().to_vec();
+        files.sort_unstable();
+
+        for f in files {
+            table.add_row(vec![
+                f.source().to_string_lossy().to_string(),
+                f.destination().to_string(),
+            ]);
+        }
+
+        log::info!("{table}");
+
+        if !m.disabled_files().is_empty() {
+            log::info!("");
+            let mut table = create_table(vec!["Disabled Files"]);
+
+            for d in m.disabled_files() {
+                table.add_row(vec![d
+                    .source()
+                    .strip_prefix(m.manifest_dir())
+                    .unwrap()
+                    .to_string_lossy()
+                    .to_string()]);
+            }
+
+            log::info!("{table}");
+        }
+    } else {
+        log::warn!("Mod '{}' could not be found", mod_name);
+    }
+
+    Ok(())
+}
+
+pub fn show_conflicts(cache_dir: &Path) -> Result<()> {
+    let mod_list = gather_mods(cache_dir)?;
+    let conflict_list_file = conflict_list_by_file(&mod_list)?;
+    let mut conflict_list_file = Vec::from_iter(conflict_list_file.iter());
+    conflict_list_file.sort_unstable_by(|(fa, _), (fb, _)| fa.cmp(fb));
+
+    let mut table = create_table(vec!["File", "Mods (Low to High Priority)"]);
+    for (file, mods) in conflict_list_file {
+        let mut mod_string = String::new();
+
+        for m in mods {
+            if mod_string.is_empty() {
+                mod_string = format!("{}", m);
+            } else {
+                mod_string = format!("{}, {}", mod_string, m);
+            }
+        }
+
+        table.add_row(vec![file, &mod_string]);
+    }
+
+    log::info!("{table}");
+
     Ok(())
 }
