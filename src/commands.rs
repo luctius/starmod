@@ -6,7 +6,7 @@ mod modlist;
 use std::{
     ffi::OsString,
     fmt::Display,
-    fs::copy,
+    fs::{copy, DirBuilder},
     path::{Path, PathBuf},
 };
 
@@ -50,8 +50,8 @@ pub enum Subcommands {
         // find_proton_home_dir: bool,
     },
     CreateCustomMod {
-        origin: PathBuf,
-        name: Option<String>,
+        name: String,
+        origin: Option<PathBuf>,
     },
     UpdateCustomMod {
         name: String,
@@ -129,21 +129,18 @@ impl Subcommands {
 
         match self {
             Subcommands::CreateCustomMod { origin, name } => {
-                let name = name.unwrap_or_else(|| {
-                    origin
-                        .file_name()
-                        .map(|name| name.to_str())
-                        .flatten()
-                        .unwrap_or("custom")
-                        .to_string()
-                });
                 let destination = settings.cache_dir().join(&name);
-                std::os::unix::fs::symlink(&origin, &destination)?;
-                log::info!(
-                    "Creating custom mod {} (link from {})",
-                    &name,
-                    origin.display()
-                );
+                if let Some(origin) = origin {
+                    std::os::unix::fs::symlink(&origin, &destination)?;
+                    log::info!(
+                        "Creating custom mod {} (link from {})",
+                        &name,
+                        origin.display()
+                    );
+                } else {
+                    log::info!("Creating custom mod {}", &name);
+                    DirBuilder::new().recursive(true).create(destination)?;
+                }
                 let mut manifest =
                     ModKind::Custom.create_mod(&settings.cache_dir(), &PathBuf::from(name))?;
                 manifest.set_priority(10000)?;
@@ -176,15 +173,15 @@ impl Subcommands {
                             .iter()
                             .find(|f| f.file_name().unwrap().eq(file_name.as_str()))
                         {
-                            let origin = settings
-                                .cache_dir()
-                                // .join(origin_mod.manifest_dir())
-                                .join(file);
+                            let origin = settings.cache_dir().join(file);
                             let destination = settings
                                 .cache_dir()
                                 .join(custom_mod.manifest_dir())
-                                .join(file_name);
+                                .join(file.strip_prefix(origin_mod.manifest_dir()).unwrap());
 
+                            DirBuilder::new()
+                                .recursive(true)
+                                .create(destination.parent().unwrap())?;
                             copy(origin, destination)?;
 
                             let mut new_mod = ModKind::Custom.create_mod(
