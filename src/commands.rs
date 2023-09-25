@@ -679,18 +679,23 @@ pub fn show_mod_status(md: &Mod, mod_list: &[Mod]) -> Result<()> {
     let conflict_list_file = conflict_list_by_file(&mod_list)?;
     let conflict_list_mod = conflict_list_by_mod(&mod_list)?;
 
+    let color = Color::White;
+
     let mut table = create_table(vec![
         "Name", "Priority", "Status", "Mod Type", "Version", "Nexus Id",
     ]);
     table.add_row(vec![
-        md.name().to_string(),
-        md.priority().to_string(),
-        md.mod_state().to_string(),
-        md.kind().to_string(),
-        md.version().unwrap_or("<Unknown>").to_string(),
-        md.nexus_id()
-            .map(|nid| nid.to_string())
-            .unwrap_or("<Unknown>".to_owned()),
+        Cell::new(md.name().to_string()).fg(color),
+        Cell::new(md.priority().to_string()).fg(color),
+        Cell::new(md.mod_state().to_string()).fg(color),
+        Cell::new(md.kind().to_string()).fg(color),
+        Cell::new(md.version().unwrap_or("<Unknown>").to_string()).fg(color),
+        Cell::new(
+            md.nexus_id()
+                .map(|nid| nid.to_string())
+                .unwrap_or("<Unknown>".to_owned()),
+        )
+        .fg(color),
     ]);
 
     log::info!("{table}");
@@ -803,6 +808,9 @@ pub fn show_legenda() -> Result<()> {
 
 pub fn show_mod_files(cache_dir: &Path, mod_name: &str) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
+
+    let color = Color::White;
+
     if let Some(m) = find_mod(&mod_list, mod_name) {
         log::info!("File overview of {}", m.name());
         log::info!("");
@@ -813,8 +821,8 @@ pub fn show_mod_files(cache_dir: &Path, mod_name: &str) -> Result<()> {
 
         for f in files {
             table.add_row(vec![
-                f.source().to_string_lossy().to_string(),
-                f.destination().to_string(),
+                Cell::new(f.source().to_string_lossy().to_string()).fg(color),
+                Cell::new(f.destination().to_string()).fg(color),
             ]);
         }
 
@@ -848,6 +856,8 @@ pub fn show_conflicts(cache_dir: &Path) -> Result<()> {
     let mut conflict_list_file = Vec::from_iter(conflict_list_file.iter());
     conflict_list_file.sort_unstable_by(|(fa, _), (fb, _)| fa.cmp(fb));
 
+    let color = Color::White;
+
     let mut table = create_table(vec!["File", "Mods (Low to High Priority)"]);
     for (file, mods) in conflict_list_file {
         let mut mod_string = String::new();
@@ -860,7 +870,10 @@ pub fn show_conflicts(cache_dir: &Path) -> Result<()> {
             }
         }
 
-        table.add_row(vec![file, &mod_string]);
+        table.add_row(vec![
+            Cell::new(file).fg(color),
+            Cell::new(&mod_string).fg(color),
+        ]);
     }
 
     log::info!("{table}");
