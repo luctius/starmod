@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use anyhow::Result;
+use loadorder::GameId;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
@@ -33,6 +34,11 @@ impl Game {
     pub fn nexus_game_name(&self) -> &'static str {
         match self {
             Self::StarMod => "starfield",
+        }
+    }
+    pub fn game_id(&self) -> GameId {
+        match self {
+            Self::StarMod => GameId::Starfield,
         }
     }
     pub fn create_from_name(app_name: &str) -> Result<Self> {

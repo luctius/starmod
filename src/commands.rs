@@ -14,6 +14,7 @@ use std::{
 use anyhow::Result;
 use clap::Parser;
 use comfy_table::{Cell, Color};
+use loadorder::GameSettings;
 use walkdir::WalkDir;
 
 use crate::{
@@ -100,6 +101,7 @@ pub enum Subcommands {
         name: Option<String>,
     },
     ShowLegenda,
+    SortPlugins,
     UpdateConfig {
         #[arg(short, long)]
         download_dir: Option<PathBuf>,
@@ -357,6 +359,12 @@ impl Subcommands {
                 Ok(())
             }
             Subcommands::ShowConflicts => show_conflicts(&settings.cache_dir()),
+            Subcommands::SortPlugins => {
+                GameSettings::new(settings.game().game_id(), settings.game_dir())?
+                    .into_load_order()
+                    .save()?;
+                Ok(())
+            }
             Subcommands::Quit => {
                 settings.stop_repl();
                 Ok(())

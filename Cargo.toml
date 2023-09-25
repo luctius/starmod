@@ -42,7 +42,7 @@ clap_complete = "4.4"
 
 # camino = "1.1.6" # TODO use camino instead of Path and PathBuf
 # enum-kinds = "0.5.1"
-# libloadorder = "11.4.1"
+libloadorder = {git = "https://github.com/Ortham/libloadorder.git", branch = "starfield"}
 
 [build-dependencies]
 shadow-rs = "0.21.0"
