@@ -23,7 +23,7 @@ pub fn create_data_manifest(
 
     let dmodman = archive_dir.with_extension(DMODMAN_EXTENTION);
 
-    let walker = WalkDir::new(&archive_dir)
+    let walker = WalkDir::new(&archive_dir.join(data_start))
         .min_depth(1)
         .max_depth(usize::MAX)
         .follow_links(false)

@@ -6,14 +6,13 @@ mod modlist;
 use std::{
     cmp::Ordering,
     collections::HashMap,
-    ffi::OsString,
     fmt::Display,
     fs::{copy, DirBuilder},
     path::{Path, PathBuf},
 };
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use comfy_table::{Cell, Color};
 use walkdir::WalkDir;
 
@@ -909,6 +908,7 @@ fn show_files_for_mod(m: &Mod, conflict_list_file: &HashMap<String, Vec<String>>
         let mut table = create_table(vec!["Disabled Files"]);
 
         for d in m.disabled_files() {
+            dbg!(d);
             table.add_row(vec![d
                 .source()
                 .strip_prefix(m.manifest_dir())
