@@ -703,8 +703,8 @@ pub fn show_mod_status(md: &Mod, mod_list: &[Mod]) -> Result<()> {
     if let Some(conflict) = conflict_list_mod.get(&md.name().to_string()) {
         let mut table = create_table(vec![
             "Conflicting file",
-            "This mod overwrites",
             "This mod is overwritten by",
+            "This mod overwrites",
         ]);
 
         for f in conflict.conflict_files() {
@@ -738,8 +738,8 @@ pub fn show_mod_status(md: &Mod, mod_list: &[Mod]) -> Result<()> {
 
                 table.add_row(vec![
                     Cell::new(f.clone()).fg(color),
-                    Cell::new(format!("{:?}", losers)).fg(color),
                     Cell::new(format!("{:?}", winners)).fg(color),
+                    Cell::new(format!("{:?}", losers)).fg(color),
                 ]);
             }
         }
