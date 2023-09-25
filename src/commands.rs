@@ -4,6 +4,8 @@ mod enable;
 mod modlist;
 
 use std::{
+    cmp::Ordering,
+    collections::HashMap,
     ffi::OsString,
     fmt::Display,
     fs::{copy, DirBuilder},
@@ -96,7 +98,7 @@ pub enum Subcommands {
     ShowConfig,
     ShowConflicts,
     ShowFiles {
-        name: String,
+        name: Option<String>,
     },
     ShowLegenda,
     UpdateConfig {
@@ -232,7 +234,7 @@ impl Subcommands {
             }
             Subcommands::List => list_mods(&settings.cache_dir()),
             Subcommands::Show { name } => show_mod(&settings.cache_dir(), &name),
-            Subcommands::ShowFiles { name } => show_mod_files(&settings.cache_dir(), &name),
+            Subcommands::ShowFiles { name } => show_mod_files(&settings.cache_dir(), name),
             Subcommands::EnableAll => {
                 enable::enable_all(&settings.cache_dir(), &settings.game_dir())?;
                 list_mods(&settings.cache_dir())
@@ -806,77 +808,169 @@ pub fn show_legenda() -> Result<()> {
     Ok(())
 }
 
-pub fn show_mod_files(cache_dir: &Path, mod_name: &str) -> Result<()> {
+pub fn show_mod_files(cache_dir: &Path, mod_name: Option<String>) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
+    let conflict_list_file = conflict_list_by_file(&mod_list)?;
 
-    let color = Color::White;
-
-    if let Some(m) = find_mod(&mod_list, mod_name) {
-        log::info!("File overview of {}", m.name());
-        log::info!("");
-        let mut table = create_table(vec!["File", "Destination"]);
-
-        let mut files = m.files().to_vec();
-        files.sort_unstable();
-
-        for f in files {
-            table.add_row(vec![
-                Cell::new(f.source().to_string_lossy().to_string()).fg(color),
-                Cell::new(f.destination().to_string()).fg(color),
-            ]);
-        }
-
-        log::info!("{table}");
-
-        if !m.disabled_files().is_empty() {
-            log::info!("");
-            let mut table = create_table(vec!["Disabled Files"]);
-
-            for d in m.disabled_files() {
-                table.add_row(vec![d
-                    .source()
-                    .strip_prefix(m.manifest_dir())
-                    .unwrap()
-                    .to_string_lossy()
-                    .to_string()]);
-            }
-
-            log::info!("{table}");
+    if let Some(mod_name) = mod_name {
+        if let Some(m) = find_mod(&mod_list, &mod_name) {
+            show_files_for_mod(&m, &conflict_list_file)
+        } else {
+            log::warn!("Mod '{}' could not be found", mod_name);
         }
     } else {
-        log::warn!("Mod '{}' could not be found", mod_name);
+        show_files(&mod_list, &conflict_list_file)
     }
 
     Ok(())
 }
 
-pub fn show_conflicts(cache_dir: &Path) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
-    let conflict_list_file = conflict_list_by_file(&mod_list)?;
-    let mut conflict_list_file = Vec::from_iter(conflict_list_file.iter());
-    conflict_list_file.sort_unstable_by(|(fa, _), (fb, _)| fa.cmp(fb));
+fn show_files(mod_list: &[Mod], conflict_list_file: &HashMap<String, Vec<String>>) {
+    let mut files = Vec::new();
 
-    let color = Color::White;
+    for m in mod_list {
+        files.extend(m.files().iter().map(|i| (i, (m.name(), m.priority()))));
+    }
 
-    let mut table = create_table(vec!["File", "Mods (Low to High Priority)"]);
-    for (file, mods) in conflict_list_file {
-        let mut mod_string = String::new();
+    files.sort_unstable_by(|(ia, (_, pa)), (ib, (_, pb))| {
+        let o = ia.destination().cmp(ib.destination());
+        if o == Ordering::Equal {
+            pa.cmp(pb)
+        } else {
+            o
+        }
+    });
 
-        for m in mods {
-            if mod_string.is_empty() {
-                mod_string = format!("{}", m);
+    log::info!("File overview");
+    log::info!("");
+    let mut table = create_table(vec!["File", "Destination", "Mod"]);
+
+    for (isf, (name, _priority)) in files {
+        let mut color = Color::White;
+        if conflict_list_file.contains_key(&isf.destination().to_string()) {
+            color = if conflict_list_file
+                .get(&isf.destination().to_string())
+                .unwrap()
+                .last()
+                .unwrap()
+                == name
+            {
+                Color::Green
             } else {
-                mod_string = format!("{}, {}", mod_string, m);
-            }
+                Color::Red
+            };
         }
 
         table.add_row(vec![
-            Cell::new(file).fg(color),
-            Cell::new(&mod_string).fg(color),
+            Cell::new(isf.source().to_string_lossy().to_string()).fg(color),
+            Cell::new(isf.destination().to_string()).fg(color),
+            Cell::new(name).fg(color),
+        ]);
+    }
+
+    log::info!("{table}");
+}
+
+fn show_files_for_mod(m: &Mod, conflict_list_file: &HashMap<String, Vec<String>>) {
+    log::info!("File overview of {}", m.name());
+    log::info!("");
+    let mut table = create_table(vec!["File", "Destination"]);
+
+    let mut files = m.files().to_vec();
+    files.sort_unstable();
+
+    for f in files {
+        let mut color = Color::White;
+        if conflict_list_file.contains_key(&f.destination().to_string()) {
+            color = if conflict_list_file
+                .get(&f.destination().to_string())
+                .unwrap()
+                .last()
+                .unwrap()
+                == m.name()
+            {
+                Color::Green
+            } else {
+                Color::Red
+            };
+        }
+
+        table.add_row(vec![
+            Cell::new(f.source().to_string_lossy().to_string()).fg(color),
+            Cell::new(f.destination().to_string()).fg(color),
+            Cell::new(m.name()).fg(color),
         ]);
     }
 
     log::info!("{table}");
 
+    if !m.disabled_files().is_empty() {
+        log::info!("");
+        let mut table = create_table(vec!["Disabled Files"]);
+
+        for d in m.disabled_files() {
+            table.add_row(vec![d
+                .source()
+                .strip_prefix(m.manifest_dir())
+                .unwrap()
+                .to_string_lossy()
+                .to_string()]);
+        }
+
+        log::info!("{table}");
+    }
+}
+
+pub fn show_conflicts(cache_dir: &Path) -> Result<()> {
+    let mod_list = gather_mods(cache_dir)?;
+    let conflict_list_file = conflict_list_by_file(&mod_list)?;
+    let mut files = Vec::new();
+
+    for m in mod_list {
+        files.extend(
+            m.files()
+                .iter()
+                .map(|i| (i.clone(), (m.name().to_owned(), m.priority()))),
+        );
+    }
+
+    files.retain(|(f, _)| conflict_list_file.contains_key(f.destination()));
+
+    files.sort_unstable_by(|(ia, (_, pa)), (ib, (_, pb))| {
+        let o = ia.destination().cmp(ib.destination());
+        if o == Ordering::Equal {
+            pa.cmp(pb)
+        } else {
+            o
+        }
+    });
+
+    log::info!("Conflict overview");
+    log::info!("");
+    let mut table = create_table(vec!["File", "Mod"]);
+
+    for (isf, (name, _priority)) in files {
+        let mut color = Color::White;
+        if conflict_list_file.contains_key(&isf.destination().to_string()) {
+            color = if conflict_list_file
+                .get(&isf.destination().to_string())
+                .unwrap()
+                .last()
+                .unwrap()
+                == &name
+            {
+                Color::Green
+            } else {
+                Color::Red
+            };
+        }
+
+        table.add_row(vec![
+            Cell::new(isf.destination().to_string()).fg(color),
+            Cell::new(name).fg(color),
+        ]);
+    }
+
+    log::info!("{table}");
     Ok(())
 }
