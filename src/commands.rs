@@ -29,37 +29,14 @@ use self::{
 
 #[derive(Debug, Clone, Parser, Default)]
 pub enum Subcommands {
-    UpdateConfig {
-        #[arg(short, long)]
-        download_dir: Option<PathBuf>,
-        #[arg(short, long)]
-        game_dir: Option<PathBuf>,
-        #[arg(short, long)]
-        cache_dir: Option<PathBuf>,
-        #[arg(short, long)]
-        proton_dir: Option<PathBuf>,
-        #[arg(short = 'o', long)]
-        compat_dir: Option<PathBuf>,
-        #[arg(short, long)]
-        editor: Option<String>,
-        // #[arg(short, long)]
-        // find_compat: bool,
-        // #[arg(short, long)]
-        // find_proton: bool,
-        // #[arg(short, long)]
-        // find_proton_home_dir: bool,
-    },
-    CreateCustomMod {
-        name: String,
-        origin: Option<PathBuf>,
-    },
-    UpdateCustomMod {
-        name: String,
-    },
     CopyToCustomMod {
         origin_mod: String,
         custom_mod: String,
         file_name: String,
+    },
+    CreateCustomMod {
+        name: String,
+        origin: Option<PathBuf>,
     },
     Disable {
         name: String,
@@ -90,13 +67,13 @@ pub enum Subcommands {
     ListDownloads,
     PurgeCache,
     PurgeConfig,
-    RemoveMod {
-        name: String,
-    },
+    ReEnableAll,
     ReInstall {
         name: String,
     },
-    ReEnableAll,
+    RemoveMod {
+        name: String,
+    },
     Rename {
         old_mod_name: String,
         new_mod_name: String,
@@ -116,12 +93,35 @@ pub enum Subcommands {
     Show {
         name: String,
     },
+    ShowConfig,
+    ShowConflicts,
     ShowFiles {
         name: String,
     },
     ShowLegenda,
-    ShowConfig,
-    ShowConflicts,
+    UpdateConfig {
+        #[arg(short, long)]
+        download_dir: Option<PathBuf>,
+        #[arg(short, long)]
+        game_dir: Option<PathBuf>,
+        #[arg(short, long)]
+        cache_dir: Option<PathBuf>,
+        #[arg(short, long)]
+        proton_dir: Option<PathBuf>,
+        #[arg(short = 'o', long)]
+        compat_dir: Option<PathBuf>,
+        #[arg(short, long)]
+        editor: Option<String>,
+        // #[arg(short, long)]
+        // find_compat: bool,
+        // #[arg(short, long)]
+        // find_proton: bool,
+        // #[arg(short, long)]
+        // find_proton_home_dir: bool,
+    },
+    UpdateCustomMod {
+        name: String,
+    },
     #[clap(hide = true)]
     Quit,
 }
