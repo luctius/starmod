@@ -8,11 +8,11 @@ use std::{
     fmt::Display,
     fs::File,
     io::{BufReader, Read, Write},
-    path::{Path, PathBuf},
 };
 use thiserror::Error;
 use xdg::BaseDirectories;
 
+use camino::{Utf8Path, Utf8PathBuf};
 use log::LevelFilter;
 
 use crate::{dmodman::DModManConfig, game::Game};
@@ -89,43 +89,39 @@ pub struct Settings {
     game: Game,
     #[serde(skip_serializing, default)]
     verbosity: LogLevel,
-    #[serde(skip_serializing, default)]
-    repl_running: bool,
-    cache_dir: PathBuf,
-    config_path: PathBuf,
-    log_path: PathBuf,
-    download_dir: PathBuf,
-    game_dir: PathBuf,
-    proton_dir: Option<PathBuf>,
-    compat_dir: Option<PathBuf>,
-    steam_dir: Option<PathBuf>,
+    cache_dir: Utf8PathBuf,
+    config_path: Utf8PathBuf,
+    log_path: Utf8PathBuf,
+    download_dir: Utf8PathBuf,
+    game_dir: Utf8PathBuf,
+    proton_dir: Option<Utf8PathBuf>,
+    compat_dir: Option<Utf8PathBuf>,
+    steam_dir: Option<Utf8PathBuf>,
     editor: Option<String>,
 }
 impl Settings {
-    fn create(verbosity: LogLevel) -> Result<Self> {
+    fn create(game: Game, verbosity: LogLevel) -> Result<Self> {
         //Extract cmd used to run this application
-        let name = PathBuf::from(std::env::args().nth(0).unwrap())
-            .file_name()
-            .unwrap()
-            .to_string_lossy()
-            .to_string();
+        let name = game.mod_manager_name();
 
-        let game = Game::create_from_name(name.as_str())?;
-
-        let config_file = PathBuf::from(game.name()).with_extension(CONFIG_EXTENTION);
+        let config_file = Utf8PathBuf::from(name).with_extension(CONFIG_EXTENTION);
 
         let xdg_base = BaseDirectories::with_prefix(&name)?;
-        let config_path = xdg_base
-            .place_config_file(config_file)
-            .with_context(|| format!("Cannot create configuration directory for {}", name))?;
-        let log_path = config_path.with_extension("log");
+        let config_path = Utf8PathBuf::try_from(
+            xdg_base
+                .place_config_file(config_file)
+                .with_context(|| format!("Cannot create configuration directory for {}", name))?,
+        )?;
+        let log_path = Utf8PathBuf::try_from(config_path.with_extension("log"))?;
 
         let download_dir = DModManConfig::read().map(|dc| dc.download_dir()).flatten();
         let download_dir = download_dir
-            .or_else(|| dirs::download_dir())
+            .or_else(|| dirs::download_dir().map(|d| Utf8PathBuf::try_from(d).unwrap()))
             .unwrap_or_default();
+        let download_dir = Utf8PathBuf::try_from(download_dir)?;
 
-        let cache_dir = xdg_base.create_cache_directory("").unwrap_or_default();
+        let cache_dir =
+            Utf8PathBuf::try_from(xdg_base.create_cache_directory("").unwrap_or_default())?;
 
         let editor = env::vars().find_map(|(key, val)| (key == EDITOR_ENV).then(|| val));
 
@@ -143,9 +139,8 @@ impl Settings {
             }
         } else {
             None
-        };
-
-        let repl_running = true;
+        }
+        .map(|sd| Utf8PathBuf::try_from(sd).unwrap());
 
         Ok(Self {
             game,
@@ -154,12 +149,11 @@ impl Settings {
             log_path,
             download_dir,
             cache_dir,
-            game_dir: PathBuf::from(""),
+            game_dir: Utf8PathBuf::from(""),
             editor,
             proton_dir,
             compat_dir,
             steam_dir,
-            repl_running,
         })
     }
     pub fn valid_config(&self) -> bool {
@@ -176,48 +170,41 @@ impl Settings {
         &self.game
     }
     pub fn cmd_name(&self) -> &str {
-        self.game.name()
+        self.game.mod_manager_name()
     }
-    pub fn config_file(&self) -> &Path {
+    pub fn config_file(&self) -> &Utf8Path {
         &self.config_path
     }
-    pub fn log_file(&self) -> &Path {
+    pub fn log_file(&self) -> &Utf8Path {
         &self.log_path
     }
-    pub fn download_dir(&self) -> &Path {
+    pub fn download_dir(&self) -> &Utf8Path {
         &self.download_dir
     }
-    pub fn cache_dir(&self) -> &Path {
+    pub fn cache_dir(&self) -> &Utf8Path {
         &self.cache_dir
     }
-    pub fn game_dir(&self) -> &Path {
+    pub fn game_dir(&self) -> &Utf8Path {
         &self.game_dir
     }
-    pub fn proton_dir(&self) -> Option<&Path> {
+    pub fn proton_dir(&self) -> Option<&Utf8Path> {
         self.proton_dir.as_deref()
     }
-    pub fn compat_dir(&self) -> Option<&Path> {
+    pub fn compat_dir(&self) -> Option<&Utf8Path> {
         self.compat_dir.as_deref()
     }
-    pub fn steam_dir(&self) -> Option<&Path> {
+    pub fn steam_dir(&self) -> Option<&Utf8Path> {
         self.steam_dir.as_deref()
     }
     pub fn editor(&self) -> String {
         self.editor.clone().unwrap_or("xdg-open".to_owned())
     }
-    pub fn repl_running(&self) -> bool {
-        self.repl_running
-    }
-    pub fn stop_repl(&mut self) {
-        self.repl_running = false;
-    }
-    pub fn read_config(verbosity: LogLevel) -> Result<Self> {
-        let settings = Self::create(verbosity)?;
+    pub fn read_config(game: Game, verbosity: LogLevel) -> Result<Self> {
+        let settings = Self::create(game, verbosity)?;
         if let Ok(config) = File::open(&settings.config_path) {
             let mut read_settings = Self::try_from(config)?;
             read_settings.game = settings.game;
             read_settings.verbosity = verbosity;
-            read_settings.repl_running = true;
             Ok(read_settings)
         } else {
             Ok(settings)
@@ -226,11 +213,11 @@ impl Settings {
     //TODO option to fetch download dir from dmodman's config
     pub fn create_config(
         &self,
-        download_dir: Option<PathBuf>,
-        game_dir: Option<PathBuf>,
-        cache_dir: Option<PathBuf>,
-        proton_dir: Option<PathBuf>,
-        compat_dir: Option<PathBuf>,
+        download_dir: Option<Utf8PathBuf>,
+        game_dir: Option<Utf8PathBuf>,
+        cache_dir: Option<Utf8PathBuf>,
+        proton_dir: Option<Utf8PathBuf>,
+        compat_dir: Option<Utf8PathBuf>,
         editor: Option<String>,
     ) -> Result<Self> {
         let mut settings = self.clone();
@@ -247,16 +234,16 @@ impl Settings {
 
         cache_dir
             .read_dir()
-            .map_err(|_| SettingErrors::NoCacheDirFound(self.game.name().to_owned()))?;
+            .map_err(|_| SettingErrors::NoCacheDirFound(self.game.mod_manager_name().to_owned()))?;
 
-        download_dir
-            .read_dir()
-            .map_err(|_| SettingErrors::NoDownloadDirFound(self.game.name().to_owned()))?;
+        download_dir.read_dir().map_err(|_| {
+            SettingErrors::NoDownloadDirFound(self.game.mod_manager_name().to_owned())
+        })?;
 
         game_dir.read_dir().map_err(|_| {
             SettingErrors::NoGameDirFound(
                 self.game.game_name().to_owned(),
-                self.game.name().to_owned(),
+                self.game.mod_manager_name().to_owned(),
             )
         })?;
 
@@ -279,10 +266,10 @@ impl Settings {
     pub fn purge_config(&self) -> Result<()> {
         self.purge_cache()?;
 
-        println!("Removing file: {}", self.config_path.display());
+        println!("Removing file: {}", self.config_path);
         std::fs::remove_file(&self.config_path)?;
         if let Some(parent) = self.config_path.parent() {
-            println!("Removing directory: {}", parent.display());
+            println!("Removing directory: {}", parent);
             std::fs::remove_dir(parent)?;
         }
         Ok(())
@@ -290,7 +277,7 @@ impl Settings {
     pub fn purge_cache(&self) -> Result<()> {
         println!(
             "Removing cache directory and it's contents: {}",
-            self.cache_dir.display()
+            self.cache_dir
         );
         std::fs::remove_dir_all(&self.cache_dir)?;
         Ok(())
@@ -315,27 +302,21 @@ impl Display for Settings {
         table
             .add_row(vec![
                 "Config File".to_owned(),
-                format!("{}", self.config_path.display()),
+                format!("{}", self.config_path),
             ])
-            .add_row(vec![
-                "Cache Dir".to_owned(),
-                format!("{}", self.cache_dir.display()),
-            ])
+            .add_row(vec!["Cache Dir".to_owned(), format!("{}", self.cache_dir)])
             .add_row(vec![
                 "Download Dir".to_owned(),
-                format!("{}", self.download_dir.display()),
+                format!("{}", self.download_dir),
             ])
-            .add_row(vec![
-                "Game Dir".to_owned(),
-                format!("{}", self.game_dir.display()),
-            ])
+            .add_row(vec!["Game Dir".to_owned(), format!("{}", self.game_dir)])
             .add_row(vec![
                 "Steam Proton Dir".to_owned(),
                 format!(
                     "{}",
                     self.proton_dir
                         .as_ref()
-                        .map(|d| d.display().to_string())
+                        .map(|d| d.to_string())
                         .unwrap_or("<Unknown>".to_owned())
                 ),
             ])
@@ -345,7 +326,7 @@ impl Display for Settings {
                     "{}",
                     self.compat_dir
                         .as_ref()
-                        .map(|d| d.display().to_string())
+                        .map(|d| d.to_string())
                         .unwrap_or("<Unknown>".to_owned())
                 ),
             ])

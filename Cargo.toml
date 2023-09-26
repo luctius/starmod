@@ -38,9 +38,9 @@ read-stdin = "1.1"
 flexi_logger = "0.27.0"
 log = "0.4"
 clap_complete = "4.4"
+camino = { version = "1.1.6", features = ["serde1"] } # TODO use camino instead of Path and PathBuf
 # clap-repl = "0.1"  # TODO: Can we use reedline-repl instead?
 
-# camino = "1.1.6" # TODO use camino instead of Path and PathBuf
 # enum-kinds = "0.5.1"
 libloadorder = {git = "https://github.com/Ortham/libloadorder.git", branch = "starfield"}
 

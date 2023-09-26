@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 
 use walkdir::WalkDir;
 
@@ -11,14 +11,14 @@ use crate::{
 
 pub fn create_data_manifest(
     mod_kind: ModKind,
-    cache_dir: &Path,
-    mod_dir: &Path,
+    cache_dir: &Utf8Path,
+    mod_dir: &Utf8Path,
     data_start: &str,
 ) -> Result<Manifest> {
     let mut files = Vec::new();
     let mut disabled_files = Vec::new();
 
-    let mut archive_dir = PathBuf::from(cache_dir);
+    let mut archive_dir = Utf8PathBuf::from(cache_dir);
     archive_dir.push(mod_dir);
 
     let dmodman = archive_dir.with_extension(DMODMAN_EXTENTION);
@@ -32,7 +32,7 @@ pub fn create_data_manifest(
 
     for entry in walker {
         let entry = entry?;
-        let entry_path = entry.path();
+        let entry_path = Utf8PathBuf::try_from(entry.path().to_path_buf())?;
 
         if entry_path.is_file() {
             let source = entry_path
@@ -40,7 +40,7 @@ pub fn create_data_manifest(
                 .strip_prefix(&archive_dir)?
                 .to_path_buf();
 
-            let destination = source.to_string_lossy().to_string();
+            let destination = source.to_string();
             let destination = destination
                 .strip_prefix(data_start)
                 .map(|d| d.to_owned())
@@ -52,13 +52,7 @@ pub fn create_data_manifest(
 
     // Disable all files containing 'readme' in the name
     files.retain(|f: &InstallFile| {
-        if f.source()
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("readme")
-        {
+        if f.source().file_name().unwrap().contains("readme") {
             disabled_files.push(f.clone());
             false
         } else {
@@ -68,7 +62,7 @@ pub fn create_data_manifest(
 
     let mut version = None;
     let mut nexus_id = None;
-    let mut name = mod_dir.to_string_lossy().to_string();
+    let mut name = mod_dir.to_string();
     if let Ok(dmodman) = DmodMan::try_from(dmodman.as_path()) {
         nexus_id = Some(dmodman.mod_id());
         version = dmodman.version();

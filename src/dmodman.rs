@@ -1,7 +1,7 @@
+use camino::{Utf8Path, Utf8PathBuf};
 use std::{
     fs::File,
     io::{BufReader, Read},
-    path::{Path, PathBuf},
 };
 
 use anyhow::{Error, Result};
@@ -63,10 +63,10 @@ impl TryFrom<File> for DmodMan {
         serde_json::from_reader(reader)
     }
 }
-impl TryFrom<&Path> for DmodMan {
+impl TryFrom<&Utf8Path> for DmodMan {
     type Error = Error;
 
-    fn try_from(path: &Path) -> Result<Self, Self::Error> {
+    fn try_from(path: &Utf8Path) -> Result<Self, Self::Error> {
         let dmodman = Self::try_from(File::open(path)?)?;
         Ok(dmodman)
     }
@@ -105,17 +105,19 @@ impl DModManConfig {
         f.read_to_string(&mut contents).ok()?;
         toml::from_str(&contents).ok()
     }
-    pub fn download_dir(&self) -> Option<PathBuf> {
+    pub fn download_dir(&self) -> Option<Utf8PathBuf> {
         let ddir = self.download_dir.as_deref()?;
-        let mut ddir = PathBuf::from(ddir);
+        let mut ddir = Utf8PathBuf::from(ddir);
 
         if let Some(profile) = self.profile.as_deref() {
             ddir.push(profile)
         }
         Some(ddir)
     }
-    pub fn path() -> Result<PathBuf> {
+    pub fn path() -> Result<Utf8PathBuf> {
         let xdg_base = BaseDirectories::with_prefix("dmodman")?;
-        Ok(xdg_base.get_config_file("config.toml"))
+        Ok(Utf8PathBuf::try_from(
+            xdg_base.get_config_file("config.toml"),
+        )?)
     }
 }

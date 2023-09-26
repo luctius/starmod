@@ -1,9 +1,9 @@
+use camino::{Utf8Path, Utf8PathBuf};
 use std::{
     cmp::Ordering,
     fmt::Display,
     fs::{remove_dir_all, remove_file, File},
     io::{BufReader, Read, Write},
-    path::{Path, PathBuf},
 };
 
 use anyhow::Result;
@@ -15,7 +15,7 @@ use crate::{
     mods::ModKind,
 };
 
-//TODO: replace PathBuf with something that is ressilient to deserialisation of non-utf8 characters
+//TODO: replace Utf8PathBuf with something that is ressilient to deserialisation of non-utf8 characters
 
 pub const MANIFEST_EXTENTION: &'static str = "ron";
 
@@ -51,11 +51,11 @@ impl Display for ModState {
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct InstallFile {
-    source: PathBuf,
+    source: Utf8PathBuf,
     destination: String,
 }
 impl InstallFile {
-    pub fn new(source: PathBuf, destination: String) -> Self {
+    pub fn new(source: Utf8PathBuf, destination: String) -> Self {
         let destination = format!(
             "{}/{}",
             DATA_DIR_NAME,
@@ -68,37 +68,33 @@ impl InstallFile {
         .replace("//", "/")
         .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME));
 
-        log::trace!("New InstallFile: {} -> {}", source.display(), destination);
+        log::trace!("New InstallFile: {} -> {}", source, destination);
 
         Self {
             source,
             destination,
         }
     }
-    pub fn source(&self) -> &Path {
+    pub fn source(&self) -> &Utf8Path {
         &self.source
     }
     pub fn destination(&self) -> &str {
         &self.destination
     }
 }
-impl From<PathBuf> for InstallFile {
-    fn from(pb: PathBuf) -> Self {
+impl From<Utf8PathBuf> for InstallFile {
+    fn from(pb: Utf8PathBuf) -> Self {
         Self::from(pb.as_path())
     }
 }
-impl From<&Path> for InstallFile {
-    fn from(p: &Path) -> Self {
+impl From<&Utf8Path> for InstallFile {
+    fn from(p: &Utf8Path) -> Self {
         let source = p.to_path_buf();
-        let destination = format!(
-            "{}/{}",
-            DATA_DIR_NAME,
-            p.strip_prefix("data").unwrap_or(p).to_string_lossy()
-        )
-        .replace("//", "/")
-        .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME));
+        let destination = format!("{}/{}", DATA_DIR_NAME, p.strip_prefix("data").unwrap_or(p))
+            .replace("//", "/")
+            .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME));
 
-        log::trace!("New InstallFile: {} -> {}", source.display(), destination);
+        log::trace!("New InstallFile: {} -> {}", source, destination);
         Self {
             source,
             destination,
@@ -120,7 +116,7 @@ impl PartialOrd for InstallFile {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Manifest {
-    manifest_dir: PathBuf,
+    manifest_dir: Utf8PathBuf,
     name: String,
     version: Option<String>,
     nexus_id: Option<u32>,
@@ -132,7 +128,7 @@ pub struct Manifest {
 }
 impl Manifest {
     pub fn new(
-        manifest_dir: &Path,
+        manifest_dir: &Utf8Path,
         name: String,
         nexus_id: Option<u32>,
         version: Option<String>,
@@ -156,8 +152,8 @@ impl Manifest {
     pub fn set_priority(&mut self, priority: isize) {
         self.priority = priority;
     }
-    pub fn from_file(cache_dir: &Path, archive: &Path) -> Result<Self> {
-        let manifest_file = PathBuf::from(cache_dir)
+    pub fn from_file(cache_dir: &Utf8Path, archive: &Utf8Path) -> Result<Self> {
+        let manifest_file = Utf8PathBuf::from(cache_dir)
             .join(archive)
             .with_extension(MANIFEST_EXTENTION);
 
@@ -165,8 +161,8 @@ impl Manifest {
         Self::try_from(file)
     }
 
-    pub fn write_manifest(&self, cache_dir: &Path) -> Result<()> {
-        let path = PathBuf::from(cache_dir)
+    pub fn write_manifest(&self, cache_dir: &Utf8Path) -> Result<()> {
+        let path = Utf8PathBuf::from(cache_dir)
             .join(self.manifest_dir.file_stem().unwrap())
             .with_extension(MANIFEST_EXTENTION);
 
@@ -179,12 +175,12 @@ impl Manifest {
 
         let serialized =
             ron::ser::to_string_pretty(self, ron::ser::PrettyConfig::default()).unwrap();
-        log::trace!("Updating manifest file '{}'.", path.display());
+        log::trace!("Updating manifest file '{}'.", path);
         file.write_all(serialized.as_bytes())?;
         Ok(())
     }
-    pub fn remove(&self, cache_dir: &Path) -> Result<()> {
-        let mut path = PathBuf::from(cache_dir).join(&self.manifest_dir);
+    pub fn remove(&self, cache_dir: &Utf8Path) -> Result<()> {
+        let mut path = Utf8PathBuf::from(cache_dir).join(&self.manifest_dir);
         remove_dir_all(&path)?;
         path.set_extension(MANIFEST_EXTENTION);
         remove_file(&path)?;
@@ -196,7 +192,7 @@ impl Manifest {
         //TODO: checks to validate the manifest file
         true
     }
-    pub fn manifest_dir(&self) -> &Path {
+    pub fn manifest_dir(&self) -> &Utf8Path {
         &self.manifest_dir
     }
     pub fn name(&self) -> &str {
@@ -233,7 +229,7 @@ impl Manifest {
         }
         dest_files
     }
-    pub fn origin_files(&self) -> Vec<PathBuf> {
+    pub fn origin_files(&self) -> Vec<Utf8PathBuf> {
         let mut origin_files = Vec::with_capacity(self.files.len());
         for f in &self.files {
             let origin = f.source.as_path();
@@ -248,7 +244,7 @@ impl Manifest {
     pub fn priority(&self) -> isize {
         self.priority
     }
-    pub fn find_config_files(&self, ext: Option<&str>) -> Vec<PathBuf> {
+    pub fn find_config_files(&self, ext: Option<&str>) -> Vec<Utf8PathBuf> {
         let mut config_files = Vec::new();
 
         let ext_vec = if let Some(ext) = ext {
@@ -259,7 +255,7 @@ impl Manifest {
 
         for f in self.origin_files() {
             if let Some(file_ext) = f.extension() {
-                let file_ext = file_ext.to_string_lossy().to_string();
+                let file_ext = file_ext.to_string();
 
                 if ext_vec.contains(&file_ext.as_str()) {
                     config_files.push(f);

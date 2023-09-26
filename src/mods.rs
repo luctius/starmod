@@ -2,10 +2,10 @@ use std::{
     ffi::OsString,
     fmt::Display,
     fs::{read_link, remove_dir, remove_file, rename, DirBuilder, File},
-    path::{Path, PathBuf},
 };
 
 use anyhow::{Error, Result};
+use camino::{Utf8Path, Utf8PathBuf};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
@@ -34,8 +34,8 @@ pub enum ModKind {
     // Label,
 }
 impl ModKind {
-    pub fn detect_mod_type(cache_dir: &Path, name: &Path) -> Result<Self> {
-        let archive_dir = PathBuf::from(cache_dir).join(name);
+    pub fn detect_mod_type(cache_dir: &Utf8Path, name: &Utf8Path) -> Result<Self> {
+        let archive_dir = Utf8PathBuf::from(cache_dir).join(name);
 
         let walker = WalkDir::new(&archive_dir)
             .min_depth(1)
@@ -87,7 +87,7 @@ impl ModKind {
 
         Ok(Self::Data)
     }
-    pub fn create_mod(self, cache_dir: &Path, name: &Path) -> Result<Mod> {
+    pub fn create_mod(self, cache_dir: &Utf8Path, name: &Utf8Path) -> Result<Mod> {
         let md = match self {
             Self::FoMod => Mod::Data(
                 cache_dir.to_path_buf(),
@@ -121,9 +121,7 @@ impl ModKind {
                             let entry_path = entry_path.to_path_buf();
                             data_path = Some(entry_path.strip_prefix(&cache_dir)?.to_path_buf());
                         } else {
-                            Err(InstallerError::MultipleDataDirectories(
-                                name.to_string_lossy().to_string(),
-                            ))?;
+                            Err(InstallerError::MultipleDataDirectories(name.to_string()))?;
                         }
                     }
                 }
@@ -150,9 +148,7 @@ impl ModKind {
                                         .to_path_buf(),
                                 );
                             } else {
-                                Err(InstallerError::MultipleDataDirectories(
-                                    name.to_string_lossy().to_string(),
-                                ))?;
+                                Err(InstallerError::MultipleDataDirectories(name.to_string()))?;
                             }
                         }
                     }
@@ -196,7 +192,7 @@ impl Display for ModKind {
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Mod {
     // Goes into Data
-    Data(PathBuf, Manifest),
+    Data(Utf8PathBuf, Manifest),
     // Virtual mod to better organise the list
     // Label(Manifest),
 }
@@ -254,7 +250,7 @@ impl Mod {
             Self::Data(.., m) => m.nexus_id(),
         }
     }
-    pub fn enable(&mut self, cache_dir: &Path, game_dir: &Path) -> Result<()> {
+    pub fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
         if self.is_enabled() {
             return Ok(());
         }
@@ -268,8 +264,8 @@ impl Mod {
         match self {
             //TODO use cache_dir from mod
             Self::Data(_, _) => {
-                let cache_dir = PathBuf::from(cache_dir);
-                let game_dir = PathBuf::from(game_dir);
+                let cache_dir = Utf8PathBuf::from(cache_dir);
+                let game_dir = Utf8PathBuf::from(game_dir);
 
                 for (of, df) in self.origin_files().iter().zip(self.dest_files().iter()) {
                     let origin = {
@@ -280,7 +276,7 @@ impl Mod {
 
                     let destination = {
                         let mut game_dir = game_dir.clone();
-                        game_dir.push(PathBuf::from(df));
+                        game_dir.push(Utf8PathBuf::from(df));
                         game_dir
                     };
 
@@ -293,29 +289,20 @@ impl Mod {
                     // This ensures that the last mod wins, but we should do conflict
                     // detection and resolution before this, so we can inform the user.
                     if destination.is_symlink() {
-                        let target = read_link(&destination)?;
+                        let target = Utf8PathBuf::try_from(read_link(&destination)?)?;
 
                         if target.starts_with(&cache_dir) {
                             remove_file(&destination)?;
-                            log::debug!(
-                                "overrule {} ({} > {})",
-                                destination.display(),
-                                origin.display(),
-                                target.display()
-                            );
+                            log::debug!("overrule {} ({} > {})", destination, origin, target);
                         } else {
                             let bkp_destination = destination.with_file_name(format!(
                                 "{}.starmod_bkp",
-                                destination
-                                    .extension()
-                                    .map(|s| s.to_str())
-                                    .flatten()
-                                    .unwrap_or_default()
+                                destination.extension().unwrap_or_default()
                             ));
                             log::info!(
                                 "renaming foreign file from {} -> {}",
-                                destination.display(),
-                                bkp_destination.display()
+                                destination,
+                                bkp_destination
                             );
                             rename(&destination, bkp_destination)?;
                         }
@@ -323,7 +310,7 @@ impl Mod {
 
                     std::os::unix::fs::symlink(&origin, &destination)?;
 
-                    log::trace!("link {} to {}", origin.display(), destination.display());
+                    log::trace!("link {} to {}", origin, destination);
                 }
             }
         }
@@ -333,15 +320,15 @@ impl Mod {
 
         Ok(())
     }
-    pub fn disable(&mut self, cache_dir: &Path, game_dir: &Path) -> Result<()> {
+    pub fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
         if !self.is_enabled() {
             return Ok(());
         }
 
         log::trace!("Disabling {}", self.name());
 
-        let cache_dir = PathBuf::from(cache_dir);
-        let game_dir = PathBuf::from(game_dir);
+        let cache_dir = Utf8PathBuf::from(cache_dir);
+        let game_dir = Utf8PathBuf::from(game_dir);
 
         for (of, df) in self.origin_files().iter().zip(self.dest_files().iter()) {
             let origin = {
@@ -351,7 +338,7 @@ impl Mod {
             };
             let destination = {
                 let mut game_dir = game_dir.clone();
-                game_dir.push(PathBuf::from(df));
+                game_dir.push(Utf8PathBuf::from(df));
                 game_dir
             };
 
@@ -360,11 +347,11 @@ impl Mod {
                 && origin == read_link(&destination)?
             {
                 remove_file(&destination)?;
-                log::trace!("removed {} -> {}", destination.display(), origin.display());
+                log::trace!("removed {} -> {}", destination, origin);
 
                 //TODO: move backup file back in place
             } else {
-                log::debug!("passing-over {}", destination.display());
+                log::debug!("passing-over {}", destination);
             }
         }
 
@@ -392,12 +379,12 @@ impl Mod {
 
         Ok(())
     }
-    pub fn manifest_dir(&self) -> &Path {
+    pub fn manifest_dir(&self) -> &Utf8Path {
         match self {
             Self::Data(.., m) => m.manifest_dir(),
         }
     }
-    pub fn origin_files(&self) -> Vec<PathBuf> {
+    pub fn origin_files(&self) -> Vec<Utf8PathBuf> {
         match self {
             Self::Data(.., m) => m.origin_files(),
         }
@@ -417,12 +404,12 @@ impl Mod {
             Self::Data(.., m) => m.disabled_files(),
         }
     }
-    pub fn remove(&self, cache_dir: &Path) -> Result<()> {
+    pub fn remove(&self, cache_dir: &Utf8Path) -> Result<()> {
         match self {
             Self::Data(.., m) => m.remove(cache_dir),
         }
     }
-    pub fn find_config_files(&self, extension: Option<&str>) -> Vec<PathBuf> {
+    pub fn find_config_files(&self, extension: Option<&str>) -> Vec<Utf8PathBuf> {
         match self {
             Self::Data(.., m) => m.find_config_files(extension),
         }
@@ -452,15 +439,14 @@ impl Mod {
         self.write()
     }
 }
-impl TryFrom<PathBuf> for Mod {
+impl TryFrom<Utf8PathBuf> for Mod {
     type Error = Error;
 
-    fn try_from(mut path: PathBuf) -> std::result::Result<Self, Self::Error> {
+    fn try_from(mut path: Utf8PathBuf) -> std::result::Result<Self, Self::Error> {
         let ext = path
             .extension()
-            .map(|ext| ext.to_str().to_owned())
-            .flatten()
-            .unwrap_or("none");
+            .map(|ext| ext.to_owned())
+            .unwrap_or("none".to_owned());
         if ext != MANIFEST_EXTENTION {
             path.set_extension(MANIFEST_EXTENTION);
         }

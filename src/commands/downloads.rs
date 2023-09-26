@@ -1,17 +1,14 @@
 use std::{
     ffi::OsString,
     fs::{self, metadata, remove_dir_all, remove_file},
-    path::{Path, PathBuf},
 };
 
 use crate::{
-    decompress::SupportedArchives,
-    dmodman::DMODMAN_EXTENTION,
-    manifest::Manifest,
-    mods::{Mod, ModKind},
+    decompress::SupportedArchives, dmodman::DMODMAN_EXTENTION, manifest::Manifest, mods::ModKind,
 };
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use thiserror::Error;
 use walkdir::WalkDir;
@@ -22,7 +19,7 @@ pub enum DownloadError {
     ArchiveNotFound(String),
 }
 
-pub fn downloaded_files(download_dir: &Path) -> Vec<(SupportedArchives, OsString)> {
+pub fn downloaded_files(download_dir: &Utf8Path) -> Vec<(SupportedArchives, OsString)> {
     let mut supported_files = Vec::new();
     let paths = fs::read_dir(download_dir).unwrap();
 
@@ -37,7 +34,7 @@ pub fn downloaded_files(download_dir: &Path) -> Vec<(SupportedArchives, OsString
     supported_files
 }
 
-pub fn extract_downloaded_files(download_dir: &Path, cache_dir: &Path) -> Result<()> {
+pub fn extract_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
     let sf = downloaded_files(download_dir);
     for (typ, f) in sf {
         extract_downloaded_file(download_dir, cache_dir, typ, f)?;
@@ -45,7 +42,11 @@ pub fn extract_downloaded_files(download_dir: &Path, cache_dir: &Path) -> Result
     Ok(())
 }
 
-pub fn find_and_extract_archive(download_dir: &Path, cache_dir: &Path, name: &str) -> Result<()> {
+pub fn find_and_extract_archive(
+    download_dir: &Utf8Path,
+    cache_dir: &Utf8Path,
+    name: &str,
+) -> Result<()> {
     let sf = downloaded_files(download_dir);
     if let Some((sa, f)) = find_archive_by_name(&sf, &name) {
         extract_downloaded_file(download_dir, cache_dir, sa, f)
@@ -57,8 +58,8 @@ pub fn find_and_extract_archive(download_dir: &Path, cache_dir: &Path, name: &st
 }
 
 fn extract_downloaded_file(
-    download_dir: &Path,
-    cache_dir: &Path,
+    download_dir: &Utf8Path,
+    cache_dir: &Utf8Path,
     archive_type: SupportedArchives,
     file: OsString,
 ) -> Result<()> {
@@ -66,24 +67,21 @@ fn extract_downloaded_file(
     //Force utf-8 compatible strings, in lower-case, here to simplify futher code.
     let file = file.to_string_lossy().to_string();
 
-    let download_file = PathBuf::from(download_dir).join(&file);
+    let download_file = Utf8PathBuf::from(download_dir).join(&file);
 
     log::info!("Extracting {}", file);
 
     let file = file.to_lowercase();
-    let archive = PathBuf::from(cache_dir)
+    let archive = Utf8PathBuf::from(cache_dir)
         .join(file.clone())
         .with_extension("");
 
     let ext = download_file.extension();
-    let dmodman_file = download_file.with_extension(&format!(
-        "{}.json",
-        ext.map(|s| s.to_str()).flatten().unwrap_or_default()
-    ));
+    let dmodman_file = download_file.with_extension(&format!("{}.json", ext.unwrap_or_default()));
 
     //TODO use dmodman file to verify if file belongs to our current game.
 
-    let mut name = PathBuf::from(file);
+    let mut name = Utf8PathBuf::from(file);
     name.set_extension("");
 
     if metadata(&archive).map(|m| m.is_dir()).unwrap_or(false)
@@ -93,7 +91,7 @@ fn extract_downloaded_file(
     {
         // Archive exists and is valid
         // Nothing to do
-        log::debug!("skipping {}", download_file.display());
+        log::debug!("skipping {}", download_file);
     } else {
         //TODO: if either one of Dir or Manifest file is missing or corrupt, remove them,
 
@@ -105,12 +103,10 @@ fn extract_downloaded_file(
             }
         }
 
-        log::trace!(
-            "extracting {} -> {}",
-            download_file.display(),
-            archive.display()
-        );
-        archive_type.decompress(&download_file, &archive).unwrap();
+        log::trace!("extracting {} -> {}", download_file, archive);
+        archive_type
+            .decompress(download_file.as_std_path(), archive.as_std_path())
+            .unwrap();
 
         // Rename all extracted files to their lower-case counterpart
         // This is especially important for fomod mods, because otherwise we would
@@ -122,8 +118,8 @@ fn extract_downloaded_file(
 
             log::trace!(
                 "copying dmondman file: {} -> {}",
-                dmodman_file.display(),
-                archive_dmodman.display()
+                dmodman_file,
+                archive_dmodman
             );
             std::fs::copy(&dmodman_file, &archive_dmodman)?;
         }
@@ -135,7 +131,7 @@ fn extract_downloaded_file(
     Ok(())
 }
 
-fn rename_recursive(path: &Path) -> Result<()> {
+fn rename_recursive(path: &Utf8Path) -> Result<()> {
     let walker = WalkDir::new(path)
         .min_depth(1)
         .max_depth(usize::MAX)
@@ -145,10 +141,10 @@ fn rename_recursive(path: &Path) -> Result<()> {
 
     for entry in walker {
         let entry = entry?;
-        let entry_path = entry.path();
+        let entry_path = Utf8PathBuf::try_from(entry.path().to_path_buf())?;
 
         if entry_path.is_dir() || entry_path.is_file() {
-            lower_case(entry_path)?;
+            lower_case(&entry_path)?;
         } else {
             continue;
         }
@@ -157,16 +153,16 @@ fn rename_recursive(path: &Path) -> Result<()> {
     Ok(())
 }
 
-fn lower_case(path: &Path) -> Result<()> {
-    let name = path.file_name().unwrap().to_string_lossy();
+fn lower_case(path: &Utf8Path) -> Result<()> {
+    let name = path.file_name().unwrap();
     let name = name.to_lowercase();
-    let name = OsString::from(name);
-    let name = name.as_os_str();
+    // let name = OsString::from(name);
+    // let name = name.as_os_str();
     let name = path.with_file_name(name);
 
-    log::trace!("ren {} -> {}", path.display(), name.display());
+    log::trace!("ren {} -> {}", path, name);
 
-    std::fs::rename(path, path.with_file_name(name).as_path())?;
+    std::fs::rename(path, path.with_file_name(name).as_std_path())?;
 
     Ok(())
 }

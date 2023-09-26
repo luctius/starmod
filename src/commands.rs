@@ -8,10 +8,10 @@ use std::{
     collections::HashMap,
     fmt::Display,
     fs::{copy, DirBuilder},
-    path::{Path, PathBuf},
 };
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use comfy_table::{Cell, Color};
 use loadorder::GameSettings;
@@ -38,7 +38,7 @@ pub enum Subcommands {
     },
     CreateCustomMod {
         name: String,
-        origin: Option<PathBuf>,
+        origin: Option<Utf8PathBuf>,
     },
     Disable {
         name: String,
@@ -104,15 +104,15 @@ pub enum Subcommands {
     SortPlugins,
     UpdateConfig {
         #[arg(short, long)]
-        download_dir: Option<PathBuf>,
+        download_dir: Option<Utf8PathBuf>,
         #[arg(short, long)]
-        game_dir: Option<PathBuf>,
+        game_dir: Option<Utf8PathBuf>,
         #[arg(short, long)]
-        cache_dir: Option<PathBuf>,
+        cache_dir: Option<Utf8PathBuf>,
         #[arg(short, long)]
-        proton_dir: Option<PathBuf>,
+        proton_dir: Option<Utf8PathBuf>,
         #[arg(short = 'o', long)]
-        compat_dir: Option<PathBuf>,
+        compat_dir: Option<Utf8PathBuf>,
         #[arg(short, long)]
         editor: Option<String>,
         // #[arg(short, long)]
@@ -125,8 +125,6 @@ pub enum Subcommands {
     UpdateCustomMod {
         name: String,
     },
-    #[clap(hide = true)]
-    Quit,
 }
 impl Subcommands {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
@@ -139,17 +137,13 @@ impl Subcommands {
                 let destination = settings.cache_dir().join(&name);
                 if let Some(origin) = origin {
                     std::os::unix::fs::symlink(&origin, &destination)?;
-                    log::info!(
-                        "Creating custom mod {} (link from {})",
-                        &name,
-                        origin.display()
-                    );
+                    log::info!("Creating custom mod {} (link from {})", &name, origin);
                 } else {
                     log::info!("Creating custom mod {}", &name);
                     DirBuilder::new().recursive(true).create(destination)?;
                 }
                 let mut manifest =
-                    ModKind::Custom.create_mod(&settings.cache_dir(), &PathBuf::from(name))?;
+                    ModKind::Custom.create_mod(&settings.cache_dir(), &Utf8PathBuf::from(name))?;
                 manifest.set_priority(10000)?;
                 Ok(())
             }
@@ -158,8 +152,8 @@ impl Subcommands {
                 if let Some(old_mod) = find_mod(&mod_list, &name) {
                     log::info!("Updating mod '{}'", old_mod.name());
                     let name = old_mod.name();
-                    let mut new_mod =
-                        ModKind::Custom.create_mod(&settings.cache_dir(), &PathBuf::from(name))?;
+                    let mut new_mod = ModKind::Custom
+                        .create_mod(&settings.cache_dir(), &Utf8PathBuf::from(name))?;
                     new_mod.set_priority(old_mod.priority())?;
                     if old_mod.is_enabled() {
                         new_mod.enable(&settings.cache_dir(), &settings.game_dir())?;
@@ -193,7 +187,7 @@ impl Subcommands {
 
                             let mut new_mod = ModKind::Custom.create_mod(
                                 &settings.cache_dir(),
-                                &PathBuf::from(custom_mod.name()),
+                                &Utf8PathBuf::from(custom_mod.name()),
                             )?;
                             new_mod.set_priority(custom_mod.priority())?;
                             if custom_mod.is_enabled() {
@@ -360,13 +354,16 @@ impl Subcommands {
             }
             Subcommands::ShowConflicts => show_conflicts(&settings.cache_dir()),
             Subcommands::SortPlugins => {
-                GameSettings::new(settings.game().game_id(), settings.game_dir())?
-                    .into_load_order()
-                    .save()?;
-                Ok(())
-            }
-            Subcommands::Quit => {
-                settings.stop_repl();
+                GameSettings::new(
+                    settings.game().game_id(),
+                    settings
+                        .game_dir()
+                        .to_path_buf()
+                        .into_std_path_buf()
+                        .as_path(),
+                )?
+                .into_load_order()
+                .save()?;
                 Ok(())
             }
         }
@@ -378,11 +375,7 @@ fn run_game(settings: &Settings, loader: bool) -> Result<()> {
         if let Some(compat_dir) = settings.compat_dir() {
             if let Some(steam_dir) = settings.steam_dir() {
                 let mut compat_dir = compat_dir.to_path_buf();
-                if compat_dir
-                    .file_name()
-                    .unwrap_or_default()
-                    .to_str()
-                    .unwrap_or_default()
+                if compat_dir.file_name().unwrap_or_default()
                     != settings.game().steam_id().to_string().as_str()
                 {
                     compat_dir.push(settings.game().steam_id().to_string());
@@ -397,7 +390,7 @@ fn run_game(settings: &Settings, loader: bool) -> Result<()> {
                     game_exe.push(settings.game().loader_name());
                 }
 
-                log::info!("Running 'STEAM_COMPAT_DATA_PATH={} STEAM_COMPAT_CLIENT_INSTALL_PATH={} {} run {}'", compat_dir.display(), steam_dir.display(), proton_exe.display(), game_exe.display());
+                log::info!("Running 'STEAM_COMPAT_DATA_PATH={} STEAM_COMPAT_CLIENT_INSTALL_PATH={} {} run {}'", compat_dir, steam_dir, proton_exe, game_exe);
 
                 let output = std::process::Command::new(proton_exe)
                     .arg("run")
@@ -433,13 +426,10 @@ fn edit_mod_config_files(
     if let Some(manifest) = modlist::find_mod(&mod_list, &name) {
         let config_list = manifest.find_config_files(extension.as_deref());
         if let Some(config_name) = config_name {
-            if let Some(cf) = config_list.iter().find(|f| {
-                f.file_name()
-                    .map(|f| f.to_str())
-                    .flatten()
-                    .unwrap_or_default()
-                    == config_name
-            }) {
+            if let Some(cf) = config_list
+                .iter()
+                .find(|f| f.file_name().unwrap_or_default() == config_name)
+            {
                 let mut config_path = settings.cache_dir().to_path_buf();
                 config_path.push(cf);
                 config_files_to_edit.push(config_path)
@@ -498,7 +488,7 @@ fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> R
             })
             .for_each(|f| {
                 if let Ok(f) = f {
-                    config_files_to_edit.push(f.into_path())
+                    config_files_to_edit.push(Utf8PathBuf::try_from(f.into_path()).unwrap())
                 }
             });
     }
@@ -518,13 +508,13 @@ fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> R
     Ok(())
 }
 
-pub fn list_downloaded_files(download_dir: &Path, cache_dir: &Path) -> Result<()> {
+pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
     let sf = downloaded_files(download_dir);
 
     let mut table = create_table(vec!["Archive", "Status"]);
 
     for (_, f) in sf {
-        let mut archive = PathBuf::from(cache_dir);
+        let mut archive = Utf8PathBuf::from(cache_dir);
         let file = f.to_string_lossy().to_string().to_lowercase();
         archive.push(file.clone());
         archive.set_extension("ron");
@@ -603,7 +593,7 @@ impl From<(bool, bool)> for Tag {
     }
 }
 
-pub fn list_mods(cache_dir: &Path) -> Result<()> {
+pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
     let conflict_list = conflict_list_by_mod(&mod_list)?;
 
@@ -673,7 +663,7 @@ pub fn list_mods(cache_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn show_mod(cache_dir: &Path, mod_name: &str) -> Result<()> {
+pub fn show_mod(cache_dir: &Utf8Path, mod_name: &str) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
     if let Some(m) = find_mod(&mod_list, mod_name) {
         show_mod_status(&m, &mod_list)?;
@@ -815,7 +805,7 @@ pub fn show_legenda() -> Result<()> {
     Ok(())
 }
 
-pub fn show_mod_files(cache_dir: &Path, mod_name: Option<String>) -> Result<()> {
+pub fn show_mod_files(cache_dir: &Utf8Path, mod_name: Option<String>) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
     let conflict_list_file = conflict_list_by_file(&mod_list)?;
 
@@ -869,7 +859,7 @@ fn show_files(mod_list: &[Mod], conflict_list_file: &HashMap<String, Vec<String>
         }
 
         table.add_row(vec![
-            Cell::new(isf.source().to_string_lossy().to_string()).fg(color),
+            Cell::new(isf.source().to_string()).fg(color),
             Cell::new(isf.destination().to_string()).fg(color),
             Cell::new(name).fg(color),
         ]);
@@ -903,7 +893,7 @@ fn show_files_for_mod(m: &Mod, conflict_list_file: &HashMap<String, Vec<String>>
         }
 
         table.add_row(vec![
-            Cell::new(f.source().to_string_lossy().to_string()).fg(color),
+            Cell::new(f.source().to_string()).fg(color),
             Cell::new(f.destination().to_string()).fg(color),
             Cell::new(m.name()).fg(color),
         ]);
@@ -921,7 +911,6 @@ fn show_files_for_mod(m: &Mod, conflict_list_file: &HashMap<String, Vec<String>>
                 .source()
                 .strip_prefix(m.manifest_dir())
                 .unwrap()
-                .to_string_lossy()
                 .to_string()]);
         }
 
@@ -929,7 +918,7 @@ fn show_files_for_mod(m: &Mod, conflict_list_file: &HashMap<String, Vec<String>>
     }
 }
 
-pub fn show_conflicts(cache_dir: &Path) -> Result<()> {
+pub fn show_conflicts(cache_dir: &Utf8Path) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
     let conflict_list_file = conflict_list_by_file(&mod_list)?;
     let mut files = Vec::new();

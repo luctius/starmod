@@ -1,4 +1,4 @@
-use std::path::Path;
+use camino::Utf8Path;
 
 use anyhow::Result;
 
@@ -6,7 +6,7 @@ use anyhow::Result;
 
 use super::modlist::{find_mod, gather_mods};
 
-pub fn enable_all(cache_dir: &Path, game_dir: &Path) -> Result<()> {
+pub fn enable_all(cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
 
     for mut md in mod_list {
@@ -16,7 +16,7 @@ pub fn enable_all(cache_dir: &Path, game_dir: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn disable_all(cache_dir: &Path, game_dir: &Path) -> Result<()> {
+pub fn disable_all(cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
 
     for mut md in mod_list {
@@ -27,8 +27,8 @@ pub fn disable_all(cache_dir: &Path, game_dir: &Path) -> Result<()> {
 }
 
 pub fn enable_mod(
-    cache_dir: &Path,
-    game_dir: &Path,
+    cache_dir: &Utf8Path,
+    game_dir: &Utf8Path,
     name: &str,
     priority: Option<isize>,
 ) -> Result<()> {
@@ -54,7 +54,7 @@ pub fn enable_mod(
     Ok(())
 }
 
-pub fn disable_mod(cache_dir: &Path, game_dir: &Path, name: &str) -> Result<()> {
+pub fn disable_mod(cache_dir: &Utf8Path, game_dir: &Utf8Path, name: &str) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
     if let Some(mut md) = find_mod(&mod_list, &name) {
         md.disable(cache_dir, game_dir)?;

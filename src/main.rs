@@ -25,6 +25,7 @@ use anyhow::Result;
 use clap::{Command, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
 use flexi_logger::{detailed_format, Duplicate, FileSpec, Logger, WriteMode};
+use game::Game;
 // use clap_repl::ClapEditor;
 use shadow_rs::shadow;
 // use simplelog::{
@@ -61,14 +62,15 @@ pub struct StarMod {
 #[command(author, version, about, long_about = None, rename_all="lower")]
 pub enum AppLet {
     StarMod(AppLetArgs),
-    SkyMod(AppLetArgs),
-    ObMod(AppLetArgs),
-    MorMod(AppLetArgs),
+    // SkyMod(AppLetArgs),
+    // ObMod(AppLetArgs),
+    // MorMod(AppLetArgs),
 }
 impl AppLet {
-    pub fn unwrap(self) -> AppLetArgs {
+    pub fn unwrap(self) -> (Game, AppLetArgs) {
         match self {
-            Self::MorMod(a) | Self::ObMod(a) | Self::SkyMod(a) | Self::StarMod(a) => a,
+            /*Self::MorMod(a) | Self::ObMod(a) | Self::SkyMod(a) |*/
+            Self::StarMod(a) => (Game::Starfield, a),
         }
     }
 }
@@ -97,9 +99,9 @@ fn log_stdout(
 
 pub fn main() -> Result<()> {
     let applet = StarMod::parse();
-    let args = applet.applet.unwrap();
+    let (game, args) = applet.applet.unwrap();
 
-    let mut settings = Settings::read_config(args.verbose)?;
+    let mut settings = Settings::read_config(game, args.verbose)?;
 
     let _logger = Logger::try_with_env_or_str("trace")?
         .log_to_file(FileSpec::try_from(settings.log_file())?)

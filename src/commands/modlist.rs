@@ -1,16 +1,14 @@
-use std::{
-    fs::{self},
-    path::Path,
-};
+use std::fs::{self};
 
 use anyhow::Result;
 
+use camino::{Utf8Path, Utf8PathBuf};
 use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 
 use crate::{manifest::MANIFEST_EXTENTION, mods::Mod};
 
-pub fn gather_mods(cache_dir: &Path) -> Result<Vec<Mod>> {
+pub fn gather_mods(cache_dir: &Utf8Path) -> Result<Vec<Mod>> {
     let paths = fs::read_dir(cache_dir)?;
 
     let mut mod_list = Vec::new();
@@ -25,7 +23,9 @@ pub fn gather_mods(cache_dir: &Path) -> Result<Vec<Mod>> {
                 .unwrap_or_default()
                 .eq(MANIFEST_EXTENTION)
             {
-                mod_list.push(Mod::try_from(entry.path())?);
+                mod_list.push(Mod::try_from(Utf8PathBuf::try_from(
+                    entry.path().to_path_buf(),
+                )?)?);
             }
         }
     }

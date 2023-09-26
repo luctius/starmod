@@ -4,14 +4,10 @@ pub const FOMOD_MODCONFIG_FILE: &'static str = "fomod/moduleconfig.xml";
 use encoding_rs_io::DecodeReaderBytes;
 
 use anyhow::Result;
+use camino::{Utf8Path, Utf8PathBuf};
 use fomod::{Config, Dependency, DependencyOperator, FlagDependency, Info};
 use read_stdin::prompt_until_ok;
-use std::{
-    collections::HashSet,
-    fs::File,
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::{collections::HashSet, fs::File, io::Read};
 use walkdir::WalkDir;
 
 use crate::{
@@ -26,11 +22,11 @@ use crate::{
 
 pub fn create_fomod_manifest(
     mod_kind: ModKind,
-    cache_dir: &Path,
-    mod_dir: &Path,
+    cache_dir: &Utf8Path,
+    mod_dir: &Utf8Path,
 ) -> Result<Manifest> {
     let mut files = Vec::new();
-    let mut archive_dir = PathBuf::from(cache_dir);
+    let mut archive_dir = Utf8PathBuf::from(cache_dir);
     archive_dir.push(mod_dir);
 
     let mut config = archive_dir.clone();
@@ -70,7 +66,7 @@ pub fn create_fomod_manifest(
         version = dmodman.version();
         name.get_or_insert_with(|| dmodman.name());
     }
-    let name = name.unwrap_or_else(|| mod_dir.to_string_lossy().to_string());
+    let name = name.unwrap_or_else(|| mod_dir.to_string());
 
     //FIXME TODO Dependencies
 
@@ -161,10 +157,10 @@ pub fn create_fomod_manifest(
 }
 
 trait FomodInstallVecExt {
-    fn to_own_vec(&self, archive_dir: &Path) -> Result<Vec<InstallFile>>;
+    fn to_own_vec(&self, archive_dir: &Utf8Path) -> Result<Vec<InstallFile>>;
 }
 impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
-    fn to_own_vec(&self, archive_dir: &Path) -> Result<Vec<InstallFile>> {
+    fn to_own_vec(&self, archive_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
         let mut files = Vec::with_capacity(self.len());
         for fte in self {
             match fte {
@@ -174,7 +170,7 @@ impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
                     f.destination = f.destination.map(|d| d.replace("\\", "/"));
 
                     let destination = f.destination.clone().unwrap_or_else(|| String::new());
-                    let source = PathBuf::from(f.source.clone().to_lowercase());
+                    let source = Utf8PathBuf::from(f.source.clone().to_lowercase());
 
                     files.push(InstallFile::new(source, dbg!(destination)));
                 }
@@ -190,7 +186,7 @@ impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
                         .or(f.destination);
 
                     let mut plugin_dir = archive_dir.to_path_buf();
-                    plugin_dir.push(PathBuf::from(f.source.to_lowercase()));
+                    plugin_dir.push(Utf8PathBuf::from(f.source.to_lowercase()));
 
                     let walker = WalkDir::new(&plugin_dir)
                         .min_depth(1)
@@ -204,19 +200,14 @@ impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
                         let entry_path = entry.path();
 
                         if entry_path.is_file() {
-                            let source = entry_path
-                                .to_path_buf()
+                            let source = Utf8PathBuf::try_from(entry_path.to_path_buf())?
                                 .strip_prefix(&archive_dir)?
                                 .to_path_buf();
 
                             let destination = format!(
                                 "{}/{}",
                                 f.destination.clone().unwrap_or_default(),
-                                source
-                                    .strip_prefix(&f.source)
-                                    .unwrap()
-                                    .to_string_lossy()
-                                    .to_string()
+                                source.strip_prefix(&f.source).unwrap().to_string()
                             );
 
                             files.push(InstallFile::new(source, destination));
@@ -247,7 +238,7 @@ fn fetch_plugin_flags(choices: &[usize], plugins: &[fomod::Plugin]) -> HashSet<F
 fn fetch_plugin_files(
     choices: &[usize],
     plugins: &[fomod::Plugin],
-    archive_dir: &Path,
+    archive_dir: &Utf8Path,
 ) -> Result<Vec<InstallFile>> {
     let mut files = Vec::new();
 
@@ -265,7 +256,7 @@ fn select_all(
     plugins: &[fomod::Plugin],
     // files: &mut Vec<InstallFile>,
     // condition_flags: &mut HashSet<FlagDependency>,
-    // archive_dir: &Path,
+    // archive_dir: &Utf8Path,
 ) -> Result<Vec<usize>> {
     let mut choices = Vec::with_capacity(plugins.len());
     for (i, p) in plugins.iter().enumerate() {

@@ -1,18 +1,18 @@
 use anyhow::Result;
-use std::path::{Path, PathBuf};
+use camino::{Utf8Path, Utf8PathBuf};
 
 use walkdir::WalkDir;
 
 use crate::{
-    dmodman::{DmodMan, DMODMAN_EXTENTION},
+    // dmodman::{DmodMan, DMODMAN_EXTENTION},
     manifest::{InstallFile, Manifest},
     mods::ModKind,
 };
 
 pub fn create_custom_manifest(
     mod_kind: ModKind,
-    cache_dir: &Path,
-    name: &Path,
+    cache_dir: &Utf8Path,
+    name: &Utf8Path,
 ) -> Result<Manifest> {
     let mut files = Vec::new();
     let mut disabled_files = Vec::new();
@@ -31,12 +31,11 @@ pub fn create_custom_manifest(
         let entry_path = entry.path();
 
         if entry_path.is_file() {
-            let source = entry_path
-                .to_path_buf()
+            let source = Utf8PathBuf::try_from(entry_path.to_path_buf())?
                 .strip_prefix(&archive_dir)?
                 .to_path_buf();
 
-            let destination = source.to_string_lossy().to_lowercase();
+            let destination = source.to_string().to_lowercase();
 
             files.push(InstallFile::new(source.into(), destination));
         }
@@ -44,13 +43,7 @@ pub fn create_custom_manifest(
 
     // Disable all files containing 'readme' in the name
     files.retain(|f: &InstallFile| {
-        if f.source()
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .contains("readme")
-        {
+        if f.source().file_name().unwrap().contains("readme") {
             disabled_files.push(f.clone());
             false
         } else {
@@ -63,7 +56,7 @@ pub fn create_custom_manifest(
 
     Ok(Manifest::new(
         name,
-        name.to_string_lossy().to_string(),
+        name.to_string(),
         nexus_id,
         version,
         files,
