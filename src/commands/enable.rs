@@ -1,10 +1,17 @@
-use camino::Utf8Path;
+use std::fs::{read_link, remove_file, rename, DirBuilder};
+
+use camino::{Utf8Path, Utf8PathBuf};
 
 use anyhow::Result;
 
 // use crate::commands::modlist;
 
-use super::modlist::{find_mod, gather_mods};
+use crate::mods::Mod;
+
+use super::{
+    conflict,
+    modlist::{find_mod, gather_mods},
+};
 
 pub fn enable_all(cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
@@ -60,5 +67,62 @@ pub fn disable_mod(cache_dir: &Utf8Path, game_dir: &Utf8Path, name: &str) -> Res
         md.disable(cache_dir, game_dir)?;
     }
 
+    Ok(())
+}
+
+pub fn enable_mods(cache_dir: &Utf8Path, game_dir: &Utf8Path, mods: &[Mod]) -> Result<()> {
+    let conflict_list = conflict::conflict_list_by_file(mods)?;
+    let mut file_list = Vec::with_capacity(conflict_list.len());
+    let mut dir_cache = Vec::new();
+
+    for m in mods {
+        file_list.extend(m.enlist_files(&conflict_list));
+    }
+
+    for f in file_list {
+        let origin = cache_dir.clone().join(f.source());
+        let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
+
+        let destination_base = destination.parent().unwrap().to_path_buf();
+        if !dir_cache.contains(&destination_base) {
+            //create intermediate directories
+            DirBuilder::new()
+                .recursive(true)
+                .create(&destination_base)?;
+            dir_cache.push(destination_base);
+        }
+
+        // Remove existing symlinks which point back to our archive dir
+        // This ensures that the last mod wins, but we should do conflict
+        // detection and resolution before this, so we can inform the user.
+        if destination.is_symlink() {
+            let target = Utf8PathBuf::try_from(read_link(&destination)?)?;
+
+            if target.starts_with(&cache_dir) {
+                remove_file(&destination)?;
+                log::debug!("overrule {} ({} > {})", destination, origin, target);
+            } else {
+                let bkp_destination = destination.with_file_name(format!(
+                    "{}.starmod_bkp",
+                    destination.extension().unwrap_or_default()
+                ));
+                log::info!(
+                    "renaming foreign file from {} -> {}",
+                    destination,
+                    bkp_destination
+                );
+                rename(&destination, bkp_destination)?;
+            }
+        }
+
+        std::os::unix::fs::symlink(&origin, &destination)?;
+
+        log::trace!("link {} to {}", origin, destination);
+    }
+    Ok(())
+}
+
+pub fn disable_mods(cache_dir: &Utf8Path, game_dir: &Utf8Path, mods: &[Mod]) -> Result<()> {
+    todo!()
     Ok(())
 }

@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     ffi::OsString,
     fmt::Display,
     fs::{read_link, remove_dir, remove_file, rename, DirBuilder, File},
@@ -264,54 +265,54 @@ impl Mod {
         match self {
             //TODO use cache_dir from mod
             Self::Data(_, _) => {
-                let cache_dir = Utf8PathBuf::from(cache_dir);
-                let game_dir = Utf8PathBuf::from(game_dir);
+                // let cache_dir = Utf8PathBuf::from(cache_dir);
+                // let game_dir = Utf8PathBuf::from(game_dir);
 
-                for (of, df) in self.origin_files().iter().zip(self.dest_files().iter()) {
-                    let origin = {
-                        let mut cache_dir = cache_dir.clone();
-                        cache_dir.push(of);
-                        cache_dir
-                    };
+                // for (of, df) in self.origin_files().iter().zip(self.dest_files().iter()) {
+                //     let origin = {
+                //         let mut cache_dir = cache_dir.clone();
+                //         cache_dir.push(of);
+                //         cache_dir
+                //     };
 
-                    let destination = {
-                        let mut game_dir = game_dir.clone();
-                        game_dir.push(Utf8PathBuf::from(df));
-                        game_dir
-                    };
+                //     let destination = {
+                //         let mut game_dir = game_dir.clone();
+                //         game_dir.push(Utf8PathBuf::from(df));
+                //         game_dir
+                //     };
 
-                    //create intermediate directories
-                    DirBuilder::new()
-                        .recursive(true)
-                        .create(destination.parent().unwrap())?;
+                //     //create intermediate directories
+                //     DirBuilder::new()
+                //         .recursive(true)
+                //         .create(destination.parent().unwrap())?;
 
-                    // Remove existing symlinks which point back to our archive dir
-                    // This ensures that the last mod wins, but we should do conflict
-                    // detection and resolution before this, so we can inform the user.
-                    if destination.is_symlink() {
-                        let target = Utf8PathBuf::try_from(read_link(&destination)?)?;
+                //     // Remove existing symlinks which point back to our archive dir
+                //     // This ensures that the last mod wins, but we should do conflict
+                //     // detection and resolution before this, so we can inform the user.
+                //     if destination.is_symlink() {
+                //         let target = Utf8PathBuf::try_from(read_link(&destination)?)?;
 
-                        if target.starts_with(&cache_dir) {
-                            remove_file(&destination)?;
-                            log::debug!("overrule {} ({} > {})", destination, origin, target);
-                        } else {
-                            let bkp_destination = destination.with_file_name(format!(
-                                "{}.starmod_bkp",
-                                destination.extension().unwrap_or_default()
-                            ));
-                            log::info!(
-                                "renaming foreign file from {} -> {}",
-                                destination,
-                                bkp_destination
-                            );
-                            rename(&destination, bkp_destination)?;
-                        }
-                    }
+                //         if target.starts_with(&cache_dir) {
+                //             remove_file(&destination)?;
+                //             log::debug!("overrule {} ({} > {})", destination, origin, target);
+                //         } else {
+                //             let bkp_destination = destination.with_file_name(format!(
+                //                 "{}.starmod_bkp",
+                //                 destination.extension().unwrap_or_default()
+                //             ));
+                //             log::info!(
+                //                 "renaming foreign file from {} -> {}",
+                //                 destination,
+                //                 bkp_destination
+                //             );
+                //             rename(&destination, bkp_destination)?;
+                //         }
+                //     }
 
-                    std::os::unix::fs::symlink(&origin, &destination)?;
+                //     std::os::unix::fs::symlink(&origin, &destination)?;
 
-                    log::trace!("link {} to {}", origin, destination);
-                }
+                //     log::trace!("link {} to {}", origin, destination);
+                // }
             }
         }
 
@@ -378,6 +379,11 @@ impl Mod {
         log::trace!("Disabled {}", self.name());
 
         Ok(())
+    }
+    pub fn enlist_files(&self, conflict_list: &HashMap<String, Vec<String>>) -> Vec<InstallFile> {
+        match self {
+            Self::Data(.., m) => m.enlist_files(conflict_list),
+        }
     }
     pub fn manifest_dir(&self) -> &Utf8Path {
         match self {

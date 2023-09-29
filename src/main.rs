@@ -19,20 +19,13 @@
     clippy::wildcard_dependencies
 )]
 
-use std::fs::File;
-
 use anyhow::Result;
 use clap::{Command, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
-use flexi_logger::{detailed_format, Duplicate, FileSpec, Logger, WriteMode};
+use flexi_logger::{detailed_format, Cleanup, Criterion, FileSpec, Logger, Naming, WriteMode};
 use game::Game;
-// use clap_repl::ClapEditor;
 use shadow_rs::shadow;
-// use simplelog::{
-//     ColorChoice, CombinedLogger, Config, ConfigBuilder, TermLogger, TerminalMode, WriteLogger,
-// };
 
-//TODO: seperate into a lib
 mod commands;
 mod decompress;
 use commands::Subcommands;
@@ -42,6 +35,7 @@ mod installers;
 mod manifest;
 mod mods;
 mod settings;
+mod tag;
 
 use settings::{LogLevel, Settings};
 
@@ -106,6 +100,12 @@ pub fn main() -> Result<()> {
     let _logger = Logger::try_with_env_or_str("trace")?
         .log_to_file(FileSpec::try_from(settings.log_file())?)
         .write_mode(WriteMode::BufferDontFlush)
+        .append()
+        .rotate(
+            Criterion::Size(100 * 1024),
+            Naming::Timestamps,
+            Cleanup::KeepLogFiles(10),
+        )
         .duplicate_to_stdout(args.verbose.into())
         .format_for_stdout(log_stdout)
         .format_for_files(detailed_format)
@@ -121,7 +121,7 @@ pub fn main() -> Result<()> {
 
     // Only allow create-config to be run when no valid settings are found
     if !settings.valid_config() {
-        if let Some(cmd @ Subcommands::UpdateConfig { .. }) = args.command {
+        if let Some(cmd @ Subcommands::Config { .. }) = args.command {
             cmd.execute(&mut settings)?;
         } else {
             return Err(SettingErrors::ConfigNotFound(settings.cmd_name().to_owned()).into());
@@ -135,4 +135,23 @@ pub fn main() -> Result<()> {
 
 fn print_completions<G: Generator>(gen: G, cmd: &mut Command) {
     generate(gen, cmd, cmd.get_name().to_string(), &mut std::io::stdout());
+}
+
+pub fn print_build() {
+    println!("version:{}", build::CLAP_LONG_VERSION);
+
+    println!("tag:{}", build::TAG);
+    println!("branch:{}", build::BRANCH);
+    println!("commit_id:{}", build::COMMIT_HASH);
+    println!("short_commit:{}", build::SHORT_COMMIT);
+    println!("commit_date_3339:{}", build::COMMIT_DATE_3339);
+
+    println!("build_os:{}", build::BUILD_OS);
+    println!("rust_version:{}", build::RUST_VERSION);
+    println!("rust_channel:{}", build::RUST_CHANNEL);
+    println!("cargo_version:{}", build::CARGO_VERSION);
+
+    println!("project_name:{}", build::PROJECT_NAME);
+    println!("build_time_3339:{}", build::BUILD_TIME_3339);
+    println!("build_rust_channel:{}", build::BUILD_RUST_CHANNEL);
 }

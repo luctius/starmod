@@ -1,6 +1,7 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use std::{
     cmp::Ordering,
+    collections::HashMap,
     fmt::Display,
     fs::{remove_dir_all, remove_file, File},
     io::{BufReader, Read, Write},
@@ -237,6 +238,24 @@ impl Manifest {
             origin_files.push(origin)
         }
         origin_files
+    }
+    pub fn enlist_files(&self, conflict_list: &HashMap<String, Vec<String>>) -> Vec<InstallFile> {
+        let mut enlisted_files = Vec::new();
+
+        for f in &self.files {
+            if let Some(winners) = conflict_list.get(&f.destination) {
+                if let Some(winner) = winners.last() {
+                    if *winner == self.name {
+                        enlisted_files.push(InstallFile {
+                            source: self.manifest_dir.to_path_buf().join(f.source.clone()),
+                            destination: f.destination.clone(),
+                        });
+                    }
+                }
+            }
+        }
+
+        enlisted_files
     }
     pub fn disabled_files(&self) -> &[InstallFile] {
         &self.disabled_files
