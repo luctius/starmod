@@ -58,6 +58,11 @@ pub enum Subcommands {
         #[command(subcommand)]
         cmd: Option<GameCmd>,
     },
+    /// Alias for Game
+    Run {
+        #[command(subcommand)]
+        cmd: Option<GameCmd>,
+    },
     /// Dangerous: removal of starmod's files
     Purge {
         #[command(subcommand)]
@@ -90,7 +95,9 @@ impl Subcommands {
             Subcommands::Download { cmd } | Subcommands::Downloads { cmd } => {
                 DownloadCmd::execute(cmd.unwrap_or_default(), settings)
             }
-            Subcommands::Game { cmd } => GameCmd::execute(cmd.unwrap_or_default(), settings),
+            Subcommands::Run { cmd } | Subcommands::Game { cmd } => {
+                GameCmd::execute(cmd.unwrap_or_default(), settings)
+            }
             Subcommands::Purge { cmd } => PurgeCmd::execute(cmd, settings),
             Subcommands::Legenda => show_legenda(),
             Subcommands::Version => {
