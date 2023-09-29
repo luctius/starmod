@@ -268,7 +268,7 @@ impl Mod {
             return Ok(());
         }
 
-        log::trace!("Enabling {}", self.name());
+        log::debug!("Enabling {}", self.name());
 
         let mut mod_list = gather_mods(cache_dir)?;
 
@@ -288,7 +288,7 @@ impl Mod {
             return Ok(());
         }
 
-        log::trace!("Disabling {}", self.name());
+        log::debug!("Disabling {}", self.name());
 
         let mut mod_list = gather_mods(cache_dir)?;
 
@@ -417,12 +417,14 @@ impl ModList for &mut [Mod] {
         let mut file_list = Vec::with_capacity(conflict_list.len());
         let mut dir_cache = Vec::new();
 
-        log::trace!("Collecting File List");
+        log::debug!("Collecting File List");
         for m in self.iter() {
             file_list.extend(m.enlist_files(&conflict_list));
         }
 
-        log::trace!("Installing Files");
+        log::trace!("file_list: {:?}", file_list);
+
+        log::debug!("Installing Files");
         for f in file_list {
             let origin = cache_dir.clone().join(f.source());
             let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
@@ -462,10 +464,10 @@ impl ModList for &mut [Mod] {
 
             std::os::unix::fs::symlink(&origin, &destination)?;
 
-            log::trace!("link {} to {}", origin, destination);
+            log::debug!("link {} to {}", origin, destination);
         }
 
-        log::trace!("Set Mods to Enabled");
+        log::debug!("Set Mods to Enabled");
         for m in self.iter_mut() {
             m.set_enabled()?;
         }
@@ -476,14 +478,16 @@ impl ModList for &mut [Mod] {
         let conflict_list = conflict_list_by_file(self)?;
         let mut file_list = Vec::with_capacity(conflict_list.len());
 
-        log::trace!("Collecting File List");
+        log::debug!("Collecting File List");
         for m in self.iter() {
             if m.is_enabled() {
                 file_list.extend(m.enlist_files(&conflict_list));
             }
         }
 
-        log::trace!("Start Removing files");
+        log::trace!("file_list: {:?}", file_list);
+
+        log::debug!("Start Removing files");
         for f in file_list {
             let origin = cache_dir.clone().join(f.source());
             let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
@@ -493,13 +497,13 @@ impl ModList for &mut [Mod] {
                 && read_link(&destination)? == origin
             {
                 remove_file(&destination)?;
-                log::trace!("removed {} -> {}", destination, origin);
+                log::debug!("removed {} -> {}", destination, origin);
             } else {
                 log::debug!("passing-over {}", destination);
             }
         }
 
-        log::trace!("Clean-up Game Dir");
+        log::debug!("Clean-up Game Dir");
         let walker = WalkDir::new(&game_dir)
             .min_depth(1)
             .max_depth(usize::MAX)
@@ -522,7 +526,7 @@ impl ModList for &mut [Mod] {
                 {
                     let new = entry_path.with_extension("");
                     if !new.exists() {
-                        log::trace!(
+                        log::debug!(
                             "Restoring Backup: {} -> {}.",
                             &entry_path.display(),
                             new.display()
@@ -533,12 +537,12 @@ impl ModList for &mut [Mod] {
             }
             // Remove empty directories
             if entry_path.is_dir() {
-                log::trace!("removing dir {}.", entry_path.display());
+                log::debug!("removing dir {}.", entry_path.display());
                 let _ = remove_dir(entry_path);
             }
         }
 
-        log::trace!("Set Mods to Disabled.");
+        log::debug!("Set Mods to Disabled.");
         for m in self.iter_mut() {
             m.set_disabled()?;
         }
