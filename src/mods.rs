@@ -448,19 +448,21 @@ impl ModList for &mut [Mod] {
                 if target.starts_with(&cache_dir) {
                     remove_file(&destination)?;
                     log::debug!("overrule {} ({} > {})", destination, origin, target);
-                } else {
-                    let bkp_destination = destination.with_file_name(format!(
-                        "{}.{}",
-                        destination.extension().unwrap_or_default(),
-                        BACKUP_EXTENTION,
-                    ));
-                    log::info!(
-                        "renaming foreign file from {} -> {}",
-                        destination,
-                        bkp_destination
-                    );
-                    rename(&destination, bkp_destination)?;
                 }
+            }
+
+            if destination.is_file() {
+                let bkp_destination = destination.with_extension(format!(
+                    "{}.{}",
+                    destination.extension().unwrap_or_default(),
+                    BACKUP_EXTENTION,
+                ));
+                log::info!(
+                    "renaming foreign file from {} -> {}",
+                    destination,
+                    bkp_destination
+                );
+                rename(&destination, bkp_destination)?;
             }
 
             std::os::unix::fs::symlink(&origin, &destination)?;
