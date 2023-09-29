@@ -76,6 +76,14 @@ impl InstallFile {
             destination,
         }
     }
+    pub fn new_raw(source: Utf8PathBuf, destination: String) -> Self {
+        log::trace!("New InstallFile: {} -> {}", source, destination);
+
+        Self {
+            source,
+            destination,
+        }
+    }
     pub fn source(&self) -> &Utf8Path {
         &self.source
     }
