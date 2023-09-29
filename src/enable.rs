@@ -43,7 +43,7 @@ pub fn enable_mod(
             mod_list[idx].set_priority(prio)?;
         }
         mod_list[idx].enable(cache_dir, game_dir)?;
-        mod_list[0..idx].as_mut().re_enable(cache_dir, game_dir)?;
+        mod_list[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
     }
 
     Ok(())
@@ -54,7 +54,7 @@ pub fn disable_mod(cache_dir: &Utf8Path, game_dir: &Utf8Path, name: &str) -> Res
 
     if let Some((_m, idx)) = find_mod(&mod_list, name) {
         mod_list[idx].disable(cache_dir, game_dir)?;
-        mod_list[0..idx].as_mut().re_enable(cache_dir, game_dir)?;
+        mod_list[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
     }
 
     Ok(())
