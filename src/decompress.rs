@@ -1,6 +1,7 @@
 use std::{
     fmt::Display,
-    fs::{DirBuilder, File},
+    fs::{self, remove_dir_all, DirBuilder, File, OpenOptions, Permissions},
+    os::unix::{fs::DirBuilderExt, prelude::PermissionsExt},
     path::{Path, PathBuf},
 };
 
@@ -49,7 +50,9 @@ impl SupportedArchives {
     pub fn decompress(&self, from_path: &Path, destination_path: &Path) -> Result<()> {
         match self {
             SupportedArchives::SevenZip => decompress_7z(from_path, destination_path),
-            SupportedArchives::Zip => decompress_zip(from_path, destination_path),
+            SupportedArchives::Zip => decompress_zip(from_path, destination_path).or_else(|e| {
+                decompress_zip_with_permission_override(from_path, destination_path).or(Err(e))
+            }),
             SupportedArchives::TarGz => decompress_tar_gz(from_path, destination_path),
             SupportedArchives::TarXz => decompress_tar_xz(from_path, destination_path),
             SupportedArchives::Rar => decompress_rar(from_path, destination_path),
@@ -114,6 +117,51 @@ fn decompress_7z(from_path: &Path, destination_path: &Path) -> Result<()> {
             path_result(destination_path)
         )
     })?;
+
+    Ok(())
+}
+
+// This was created to fix a problem with a file setting only read-only permissions to a file
+fn decompress_zip_with_permission_override(
+    from_path: &Path,
+    destination_path: &Path,
+) -> Result<()> {
+    use zip::read::ZipArchive;
+
+    println!("Retrying unzip with forced permissions");
+    remove_dir_all(destination_path)?;
+
+    let file = File::open(from_path)
+        .with_context(|| format!("Failed to open file from Path: {}", path_result(from_path),))?;
+
+    let mut zip = ZipArchive::new(file)?;
+    for idx in 0..zip.len() {
+        let mut file = zip.by_index(idx)?;
+
+        file.enclosed_name();
+        let destination = destination_path.join(file.enclosed_name().unwrap());
+        if destination.is_file() {
+            DirBuilder::new()
+                .mode(0o755)
+                .recursive(true)
+                .create(destination.parent().unwrap())?;
+
+            // let mut dest_file = dbg!(File::open(&destination)?);
+            let mut dest_file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open(&destination)?;
+
+            std::io::copy(&mut file, &mut dest_file)?;
+            fs::set_permissions(destination, Permissions::from_mode(0o644))?;
+        } else {
+            DirBuilder::new()
+                .mode(0o755)
+                .recursive(true)
+                .create(destination)?;
+        }
+    }
 
     Ok(())
 }

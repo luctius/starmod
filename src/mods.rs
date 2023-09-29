@@ -119,7 +119,7 @@ impl ModKind {
                     {
                         if data_path.is_none() {
                             let entry_path = entry_path.to_path_buf();
-                            data_path = Some(entry_path.strip_prefix(&cache_dir)?.to_path_buf());
+                            data_path = Some(entry_path.strip_prefix(&manifest_dir)?.to_path_buf());
                         } else {
                             Err(InstallerError::MultipleDataDirectories(name.to_string()))?;
                         }
@@ -144,7 +144,7 @@ impl ModKind {
                                 data_path = Some(
                                     entry_path
                                         .to_path_buf()
-                                        .strip_prefix(&cache_dir)?
+                                        .strip_prefix(&manifest_dir)?
                                         .to_path_buf(),
                                 );
                             } else {

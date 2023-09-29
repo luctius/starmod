@@ -125,7 +125,7 @@ fn extract_downloaded_file(
         }
 
         let mod_kind = ModKind::detect_mod_type(&cache_dir, &name)?;
-        let _md = mod_kind.create_mod(&cache_dir, &name)?;
+        let _md = dbg!(mod_kind.create_mod(&cache_dir, &name)?);
     }
 
     Ok(())

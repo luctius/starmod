@@ -18,9 +18,7 @@ pub fn create_data_manifest(
     let mut files = Vec::new();
     let mut disabled_files = Vec::new();
 
-    let mut archive_dir = Utf8PathBuf::from(cache_dir);
-    archive_dir.push(mod_dir);
-
+    let archive_dir = cache_dir.join(mod_dir);
     let dmodman = archive_dir.with_extension(DMODMAN_EXTENTION);
 
     let walker = WalkDir::new(&archive_dir.join(data_start))
