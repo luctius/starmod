@@ -6,7 +6,7 @@ use anyhow::Result;
 
 // use crate::commands::modlist;
 
-use crate::mods::Mod;
+use crate::mods::{Mod, ModList};
 
 use super::{
     conflict,
@@ -14,21 +14,18 @@ use super::{
 };
 
 pub fn enable_all(cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
+    let mut mod_list = gather_mods(cache_dir)?;
 
-    for mut md in mod_list {
-        md.enable(cache_dir, game_dir)?;
-    }
+    mod_list.disable(cache_dir, game_dir)?;
+    mod_list.enable(cache_dir, game_dir)?;
 
     Ok(())
 }
 
 pub fn disable_all(cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
+    let mut mod_list = gather_mods(cache_dir)?;
 
-    for mut md in mod_list {
-        md.disable(cache_dir, game_dir)?;
-    }
+    mod_list.disable(cache_dir, game_dir)?;
 
     Ok(())
 }
@@ -39,32 +36,25 @@ pub fn enable_mod(
     name: &str,
     priority: Option<isize>,
 ) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
-    if let Some(mut md) = find_mod(&mod_list, &name) {
-        if let Some(priority) = priority {
-            md.set_priority(priority)?;
-        }
-        md.enable(cache_dir, game_dir)?;
+    let mut mod_list = gather_mods(cache_dir)?;
 
-        // Disable and re-enable all mods to account for file conflicts
-        let mut list = gather_mods(cache_dir)?;
-        list.retain(|m| m.is_enabled());
-
-        for m in &mut list {
-            m.disable(cache_dir, game_dir)?;
+    if let Some((_m, idx)) = find_mod(&mod_list, name) {
+        if let Some(prio) = priority {
+            mod_list[idx].set_priority(prio)?;
         }
-        for m in &mut list {
-            m.enable(cache_dir, game_dir)?;
-        }
+        mod_list[idx].enable(cache_dir, game_dir)?;
+        mod_list[0..idx].as_mut().re_enable(cache_dir, game_dir)?;
     }
 
     Ok(())
 }
 
 pub fn disable_mod(cache_dir: &Utf8Path, game_dir: &Utf8Path, name: &str) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
-    if let Some(mut md) = find_mod(&mod_list, &name) {
-        md.disable(cache_dir, game_dir)?;
+    let mut mod_list = gather_mods(cache_dir)?;
+
+    if let Some((_m, idx)) = find_mod(&mod_list, name) {
+        mod_list[idx].disable(cache_dir, game_dir)?;
+        mod_list[0..idx].as_mut().re_enable(cache_dir, game_dir)?;
     }
 
     Ok(())

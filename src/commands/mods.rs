@@ -12,7 +12,7 @@ use crate::{
     conflict::conflict_list_by_file,
     enable::{disable_all, disable_mod, enable_all, enable_mod},
     modlist::{self, find_mod, gather_mods},
-    mods::{Mod, ModKind},
+    mods::{Mod, ModKind, ModList},
     settings::{create_table, Settings},
 };
 
@@ -120,7 +120,7 @@ impl ModCmd {
             }
             Self::Remove { name } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some(mut md) = find_mod(&mod_list, &name) {
+                if let Some((mut md, _idx)) = find_mod(&mod_list, &name) {
                     md.disable(&settings.cache_dir(), &settings.game_dir())?;
                     md.remove(&settings.cache_dir())?;
                     log::info!("Removed mod '{}'", md.name());
@@ -132,14 +132,9 @@ impl ModCmd {
             }
             Self::ReEnableAll {} => {
                 let mut mod_list = gather_mods(&settings.cache_dir())?;
-                mod_list.retain(|m| m.is_enabled());
-                for manifest in mod_list.iter_mut() {
-                    manifest.disable(&settings.cache_dir(), &settings.game_dir())?;
-                }
-                for manifest in mod_list.iter_mut() {
-                    manifest.enable(&settings.cache_dir(), &settings.game_dir())?;
-                }
+                mod_list.re_enable(&settings.cache_dir(), &settings.game_dir())?;
                 log::info!("Mods re-enabled.");
+                list_mods(&settings.cache_dir())?;
                 Ok(())
             }
             Self::Rename {
@@ -147,7 +142,7 @@ impl ModCmd {
                 new_mod_name,
             } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some(mut m) = find_mod(&mod_list, &old_mod_name) {
+                if let Some((mut m, _idx)) = find_mod(&mod_list, &old_mod_name) {
                     m.set_name(new_mod_name)?;
                     list_mods(&settings.cache_dir())?;
                 } else {
@@ -157,7 +152,7 @@ impl ModCmd {
             }
             Self::SetPrio { name, priority } | Self::SetPriority { name, priority } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some(mut m) = find_mod(&mod_list, &name) {
+                if let Some((mut m, _idx)) = find_mod(&mod_list, &name) {
                     m.set_priority(priority)?;
                     if priority < 0 {
                         m.disable(&settings.cache_dir(), &settings.game_dir())?;
@@ -171,7 +166,7 @@ impl ModCmd {
             //TODO: this should not be neccesary
             Self::UpdateCustom { name } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some(old_mod) = find_mod(&mod_list, &name) {
+                if let Some((old_mod, _idx)) = find_mod(&mod_list, &name) {
                     log::info!("Updating mod '{}'", old_mod.name());
                     let name = old_mod.name();
                     let mut new_mod = ModKind::Custom
@@ -189,8 +184,8 @@ impl ModCmd {
                 file_name,
             } => {
                 let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some(origin_mod) = find_mod(&mod_list, &origin_mod) {
-                    if let Some(custom_mod) = find_mod(&mod_list, &custom_mod) {
+                if let Some((origin_mod, _idx)) = find_mod(&mod_list, &origin_mod) {
+                    if let Some((custom_mod, _idx)) = find_mod(&mod_list, &custom_mod) {
                         if let Some(file) = origin_mod
                             .origin_files()
                             .iter()
@@ -236,8 +231,8 @@ impl ModCmd {
 
 fn show_mod(cache_dir: &Utf8Path, mod_name: &str) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
-    if let Some(m) = find_mod(&mod_list, mod_name) {
-        show_mod_status(&m, &mod_list)?;
+    if let Some((_, idx)) = find_mod(&mod_list, mod_name) {
+        show_mod_status(&mod_list[idx], &mod_list)?;
     } else {
         log::info!("-> No mod found by that name: {}", mod_name);
     }
@@ -323,7 +318,7 @@ fn edit_mod_config_files(
 ) -> Result<()> {
     let mut config_files_to_edit = Vec::new();
     let mod_list = gather_mods(&settings.cache_dir())?;
-    if let Some(manifest) = modlist::find_mod(&mod_list, &name) {
+    if let Some((manifest, _idx)) = modlist::find_mod(&mod_list, &name) {
         let config_list = manifest.find_config_files(extension.as_deref());
         if let Some(config_name) = config_name {
             if let Some(cf) = config_list

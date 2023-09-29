@@ -6,6 +6,7 @@ use std::{
 use crate::{
     decompress::SupportedArchives,
     dmodman::DMODMAN_EXTENTION,
+    enable::disable_mod,
     manifest::Manifest,
     modlist::{find_mod, gather_mods},
     mods::ModKind,
@@ -57,18 +58,19 @@ impl DownloadCmd {
                 list_mods(&settings.cache_dir())
             }
             Self::ReInstall { name } => {
-                let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some(mut m) = find_mod(&mod_list, &name) {
-                    m.disable(&settings.cache_dir(), &settings.game_dir())?;
-                    m.remove(&settings.cache_dir())?;
+                todo!()
+                // let mod_list = gather_mods(&settings.cache_dir())?;
+                // if let Some(mut m) = find_mod(&mod_list, &name) {
+                //     m.disable(&settings.cache_dir(), &settings.game_dir())?;
+                //     m.remove(&settings.cache_dir())?;
 
-                    let mod_type =
-                        ModKind::detect_mod_type(&settings.cache_dir(), &m.manifest_dir())?;
-                    mod_type.create_mod(&settings.cache_dir(), &m.manifest_dir())?;
-                } else {
-                    log::warn!("Mod '{name}' not found.")
-                }
-                Ok(())
+                //     let mod_type =
+                //         ModKind::detect_mod_type(&settings.cache_dir(), &m.manifest_dir())?;
+                //     mod_type.create_mod(&settings.cache_dir(), &m.manifest_dir())?;
+                // } else {
+                //     log::warn!("Mod '{name}' not found.")
+                // }
+                // Ok(())
             }
         }
     }

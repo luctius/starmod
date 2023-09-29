@@ -35,7 +35,7 @@ pub fn gather_mods(cache_dir: &Utf8Path) -> Result<Vec<Mod>> {
     Ok(mod_list)
 }
 
-pub fn find_mod(mod_list: &[Mod], mod_name: &str) -> Option<Mod> {
+pub fn find_mod(mod_list: &[Mod], mod_name: &str) -> Option<(Mod, usize)> {
     if let Some(m) = find_mod_by_name(mod_list, &mod_name) {
         Some(m)
     } else if let Ok(idx) = usize::from_str_radix(&mod_name, 10) {
@@ -47,24 +47,25 @@ pub fn find_mod(mod_list: &[Mod], mod_name: &str) -> Option<Mod> {
     }
 }
 
-pub fn find_mod_by_index(mod_list: &[Mod], idx: usize) -> Option<Mod> {
-    mod_list.get(idx).map(|m| m.clone())
+pub fn find_mod_by_index(mod_list: &[Mod], idx: usize) -> Option<(Mod, usize)> {
+    mod_list.get(idx).map(|m| (m.clone(), idx))
 }
-pub fn find_mod_by_name(mod_list: &[Mod], name: &str) -> Option<Mod> {
+pub fn find_mod_by_name(mod_list: &[Mod], name: &str) -> Option<(Mod, usize)> {
     mod_list
         .iter()
-        .find_map(|m| (m.name() == name).then(|| m.clone()))
+        .enumerate()
+        .find_map(|(idx, m)| (m.name() == name).then(|| (m.clone(), idx)))
 }
-pub fn find_mod_by_name_fuzzy(mod_list: &[Mod], fuzzy_name: &str) -> Option<Mod> {
+pub fn find_mod_by_name_fuzzy(mod_list: &[Mod], fuzzy_name: &str) -> Option<(Mod, usize)> {
     let matcher = SkimMatcherV2::default();
     let mut match_vec = Vec::new();
 
-    mod_list.iter().for_each(|m| {
+    mod_list.iter().enumerate().for_each(|(idx, m)| {
         let i = matcher.fuzzy_match(m.name(), &fuzzy_name).unwrap_or(0);
-        match_vec.push((m, i));
+        match_vec.push(((m, idx), i));
     });
 
     match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
 
-    match_vec.last().map(|(m, _)| (*m).clone())
+    match_vec.last().map(|((m, idx), _)| ((*m).clone(), *idx))
 }

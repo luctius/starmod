@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     ffi::OsString,
     fmt::Display,
     fs::{read_link, remove_dir, remove_file, rename, DirBuilder, File},
@@ -20,6 +20,7 @@ use crate::{
         InstallerError,
     },
     manifest::{InstallFile, Manifest, ModState, MANIFEST_EXTENTION},
+    modlist::gather_mods,
 };
 
 const BACKUP_EXTENTION: &'static str = "starmod_bkp";
@@ -269,63 +270,17 @@ impl Mod {
 
         log::trace!("Enabling {}", self.name());
 
-        match self {
-            //TODO use cache_dir from mod
-            Self::Data(_, _) => {
-                // let cache_dir = Utf8PathBuf::from(cache_dir);
-                // let game_dir = Utf8PathBuf::from(game_dir);
+        let mut mod_list = gather_mods(cache_dir)?;
 
-                // for (of, df) in self.origin_files().iter().zip(self.dest_files().iter()) {
-                //     let origin = {
-                //         let mut cache_dir = cache_dir.clone();
-                //         cache_dir.push(of);
-                //         cache_dir
-                //     };
-
-                //     let destination = {
-                //         let mut game_dir = game_dir.clone();
-                //         game_dir.push(Utf8PathBuf::from(df));
-                //         game_dir
-                //     };
-
-                //     //create intermediate directories
-                //     DirBuilder::new()
-                //         .recursive(true)
-                //         .create(destination.parent().unwrap())?;
-
-                //     // Remove existing symlinks which point back to our archive dir
-                //     // This ensures that the last mod wins, but we should do conflict
-                //     // detection and resolution before this, so we can inform the user.
-                //     if destination.is_symlink() {
-                //         let target = Utf8PathBuf::try_from(read_link(&destination)?)?;
-
-                //         if target.starts_with(&cache_dir) {
-                //             remove_file(&destination)?;
-                //             log::debug!("overrule {} ({} > {})", destination, origin, target);
-                //         } else {
-                //             let bkp_destination = destination.with_file_name(format!(
-                //                 "{}.{}",
-                //                 destination.extension().unwrap_or_default(), BACKUP_EXTENTION
-                //             ));
-                //             log::info!(
-                //                 "renaming foreign file from {} -> {}",
-                //                 destination,
-                //                 bkp_destination
-                //             );
-                //             rename(&destination, bkp_destination)?;
-                //         }
-                //     }
-
-                //     std::os::unix::fs::symlink(&origin, &destination)?;
-
-                //     log::trace!("link {} to {}", origin, destination);
-                // }
-            }
-        }
+        let idx = mod_list
+            .iter()
+            .enumerate()
+            .find(|(_, m)| m.name() == self.name())
+            .map(|(idx, _)| idx)
+            .unwrap();
 
         self.set_enabled()?;
-        log::trace!("Enabled {}", self.name());
-
+        mod_list[0..idx].as_mut().re_enable(cache_dir, game_dir)?;
         Ok(())
     }
     pub fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
@@ -335,58 +290,20 @@ impl Mod {
 
         log::trace!("Disabling {}", self.name());
 
-        let cache_dir = Utf8PathBuf::from(cache_dir);
-        let game_dir = Utf8PathBuf::from(game_dir);
+        let mut mod_list = gather_mods(cache_dir)?;
 
-        for (of, df) in self.origin_files().iter().zip(self.dest_files().iter()) {
-            let origin = {
-                let mut cache_dir = cache_dir.clone();
-                cache_dir.push(of);
-                cache_dir
-            };
-            let destination = {
-                let mut game_dir = game_dir.clone();
-                game_dir.push(Utf8PathBuf::from(df));
-                game_dir
-            };
-
-            if destination.is_file()
-                && destination.is_symlink()
-                && origin == read_link(&destination)?
-            {
-                remove_file(&destination)?;
-                log::trace!("removed {} -> {}", destination, origin);
-
-                //TODO: move backup file back in place
-            } else {
-                log::debug!("passing-over {}", destination);
-            }
-        }
-
-        //TODO: this could be optimised
-        // right now it will after every disable try to delete
-        // all directories in the game dir who are empty.
-        let walker = WalkDir::new(&game_dir)
-            .min_depth(1)
-            .max_depth(usize::MAX)
-            .follow_links(false)
-            .same_file_system(true)
-            .contents_first(false);
-
-        for entry in walker {
-            let entry = entry?;
-            let entry_path = entry.path();
-
-            if entry_path.is_dir() {
-                let _ = remove_dir(entry_path);
-            }
-        }
+        let idx = mod_list
+            .iter()
+            .enumerate()
+            .find(|(_, m)| m.name() == self.name())
+            .map(|(idx, _)| idx)
+            .unwrap();
 
         self.set_disabled()?;
-        log::trace!("Disabled {}", self.name());
-
+        mod_list[0..idx].as_mut().re_enable(cache_dir, game_dir)?;
         Ok(())
     }
+
     pub fn enlist_files(&self, conflict_list: &HashMap<String, Vec<String>>) -> Vec<InstallFile> {
         match self {
             Self::Data(.., m) => m.enlist_files(conflict_list),
@@ -481,6 +398,18 @@ impl TryFrom<Utf8PathBuf> for Mod {
 pub trait ModList {
     fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()>;
     fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()>;
+    fn re_enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()>;
+}
+impl ModList for Vec<Mod> {
+    fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
+        self.as_mut_slice().enable(cache_dir, game_dir)
+    }
+    fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
+        self.as_mut_slice().disable(cache_dir, game_dir)
+    }
+    fn re_enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
+        self.as_mut_slice().re_enable(cache_dir, game_dir)
+    }
 }
 impl ModList for &mut [Mod] {
     fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
@@ -488,10 +417,12 @@ impl ModList for &mut [Mod] {
         let mut file_list = Vec::with_capacity(conflict_list.len());
         let mut dir_cache = Vec::new();
 
+        log::trace!("Collecting File List");
         for m in self.iter() {
             file_list.extend(m.enlist_files(&conflict_list));
         }
 
+        log::trace!("Installing Files");
         for f in file_list {
             let origin = cache_dir.clone().join(f.source());
             let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
@@ -534,6 +465,7 @@ impl ModList for &mut [Mod] {
             log::trace!("link {} to {}", origin, destination);
         }
 
+        log::trace!("Set Mods to Enabled");
         for m in self.iter_mut() {
             m.set_enabled()?;
         }
@@ -544,12 +476,14 @@ impl ModList for &mut [Mod] {
         let conflict_list = conflict_list_by_file(self)?;
         let mut file_list = Vec::with_capacity(conflict_list.len());
 
+        log::trace!("Collecting File List");
         for m in self.iter() {
             if m.is_enabled() {
                 file_list.extend(m.enlist_files(&conflict_list));
             }
         }
 
+        log::trace!("Start Removing files");
         for f in file_list {
             let origin = cache_dir.clone().join(f.source());
             let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
@@ -565,6 +499,7 @@ impl ModList for &mut [Mod] {
             }
         }
 
+        log::trace!("Clean-up Game Dir");
         let walker = WalkDir::new(&game_dir)
             .min_depth(1)
             .max_depth(usize::MAX)
@@ -603,9 +538,32 @@ impl ModList for &mut [Mod] {
             }
         }
 
+        log::trace!("Set Mods to Disabled.");
         for m in self.iter_mut() {
             m.set_disabled()?;
         }
+
+        Ok(())
+    }
+    fn re_enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
+        let mut mod_cache = HashSet::with_capacity(self.len());
+        self.iter()
+            .enumerate()
+            .filter(|(_, m)| m.is_enabled())
+            .map(|(idx, _m)| idx)
+            .for_each(|idx| {
+                mod_cache.insert(idx);
+            });
+
+        self.disable(cache_dir, game_dir)?;
+
+        let mut mod_cache = self
+            .iter()
+            .enumerate()
+            .filter(|(idx, _m)| mod_cache.contains(idx))
+            .map(|(_idx, m)| m.clone())
+            .collect::<Vec<_>>();
+        mod_cache.enable(cache_dir, game_dir)?;
 
         Ok(())
     }
