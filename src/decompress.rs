@@ -154,7 +154,10 @@ fn decompress_zip_with_permission_override(
                 .open(&destination)?;
 
             std::io::copy(&mut file, &mut dest_file)?;
-            fs::set_permissions(destination, Permissions::from_mode(0o644))?;
+            fs::set_permissions(
+                destination,
+                Permissions::from_mode(file.unix_mode().unwrap_or(0o755)),
+            )?;
         } else {
             DirBuilder::new()
                 .mode(0o755)
