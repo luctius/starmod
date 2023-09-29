@@ -9,22 +9,22 @@ pub enum ConfigCmd {
     #[default]
     Show,
     Update {
-        #[arg(short, long)]
+        #[arg(short = 'd', long)]
         download_dir: Option<Utf8PathBuf>,
-        #[arg(short, long)]
+        #[arg(short = 'g', long)]
         game_dir: Option<Utf8PathBuf>,
-        #[arg(short, long)]
+        #[arg(short = 'c', long)]
         cache_dir: Option<Utf8PathBuf>,
-        #[arg(short, long)]
+        #[arg(short = 'p', long)]
         proton_dir: Option<Utf8PathBuf>,
         #[arg(short = 'o', long)]
         compat_dir: Option<Utf8PathBuf>,
-        #[arg(short, long)]
+        #[arg(short = 'e', long)]
         editor: Option<String>,
-        #[arg(short, long, value_enum)]
-        default_run: Option<RunCmdKind>,
-        #[arg(short, long)]
+        #[arg(short = 'x', long)]
         xedit_dir: Option<Utf8PathBuf>,
+        #[arg(long, value_enum)]
+        default_run: Option<RunCmdKind>,
         // #[arg(short, long, value_enum)]
         // loot_type: Option<LootType>, FIXME
         #[arg(long)]

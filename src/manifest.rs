@@ -252,10 +252,15 @@ impl Manifest {
                         });
                     }
                 }
+            } else {
+                enlisted_files.push(InstallFile {
+                    source: self.manifest_dir.to_path_buf().join(f.source.clone()),
+                    destination: f.destination.clone(),
+                });
             }
         }
 
-        enlisted_files
+        dbg!(enlisted_files)
     }
     pub fn disabled_files(&self) -> &[InstallFile] {
         &self.disabled_files
