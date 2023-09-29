@@ -300,6 +300,7 @@ impl Mod {
             .unwrap();
 
         self.set_disabled()?;
+        mod_list[idx..=idx].as_mut().disable(cache_dir, game_dir)?;
         mod_list[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
         Ok(())
     }
