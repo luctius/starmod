@@ -280,7 +280,7 @@ impl Mod {
             .unwrap();
 
         self.set_enabled()?;
-        mod_list[0..idx].as_mut().re_enable(cache_dir, game_dir)?;
+        mod_list[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
         Ok(())
     }
     pub fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
@@ -300,7 +300,7 @@ impl Mod {
             .unwrap();
 
         self.set_disabled()?;
-        mod_list[0..idx].as_mut().re_enable(cache_dir, game_dir)?;
+        mod_list[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
         Ok(())
     }
 
