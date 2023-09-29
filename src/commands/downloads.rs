@@ -4,19 +4,99 @@ use std::{
 };
 
 use crate::{
-    decompress::SupportedArchives, dmodman::DMODMAN_EXTENTION, manifest::Manifest, mods::ModKind,
+    decompress::SupportedArchives,
+    dmodman::DMODMAN_EXTENTION,
+    manifest::Manifest,
+    modlist::{find_mod, gather_mods},
+    mods::ModKind,
+    settings::{create_table, Settings},
 };
 
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
+use clap::Parser;
+use comfy_table::{Cell, Color};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use thiserror::Error;
 use walkdir::WalkDir;
+
+use super::list::list_mods;
 
 #[derive(Error, Debug)]
 pub enum DownloadError {
     #[error("the archive {0} cannot be found.")]
     ArchiveNotFound(String),
+}
+
+#[derive(Debug, Clone, Parser, Default)]
+pub enum DownloadCmd {
+    #[default]
+    List,
+    Extract {
+        name: String,
+    },
+    ExtractAll,
+    ReInstall {
+        name: String,
+    },
+}
+impl DownloadCmd {
+    pub fn execute(self, settings: &mut Settings) -> Result<()> {
+        match self {
+            Self::List => list_downloaded_files(&settings.download_dir(), &settings.cache_dir()),
+            Self::Extract { name } => {
+                find_and_extract_archive(
+                    &settings.download_dir(),
+                    &settings.cache_dir(),
+                    name.as_str(),
+                )?;
+                list_mods(&settings.cache_dir())
+            }
+            Self::ExtractAll => {
+                extract_downloaded_files(&settings.download_dir(), &settings.cache_dir())?;
+                list_mods(&settings.cache_dir())
+            }
+            Self::ReInstall { name } => {
+                let mod_list = gather_mods(&settings.cache_dir())?;
+                if let Some(mut m) = find_mod(&mod_list, &name) {
+                    m.disable(&settings.cache_dir(), &settings.game_dir())?;
+                    m.remove(&settings.cache_dir())?;
+
+                    let mod_type =
+                        ModKind::detect_mod_type(&settings.cache_dir(), &m.manifest_dir())?;
+                    mod_type.create_mod(&settings.cache_dir(), &m.manifest_dir())?;
+                } else {
+                    log::warn!("Mod '{name}' not found.")
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
+    let sf = downloaded_files(download_dir);
+
+    let mut table = create_table(vec!["Archive", "Status"]);
+
+    for (_, f) in sf {
+        let mut archive = Utf8PathBuf::from(cache_dir);
+        let file = f.to_string_lossy().to_string().to_lowercase();
+        archive.push(file.clone());
+        archive.set_extension("ron");
+
+        table.add_row(vec![
+            Cell::new(f.to_string_lossy()).fg(Color::White),
+            Cell::new(match archive.exists() && archive.is_file() {
+                true => "Installed".to_string(),
+                false => "New".to_string(),
+            })
+            .fg(Color::White),
+        ]);
+    }
+
+    log::info!("{table}");
+    Ok(())
 }
 
 pub fn downloaded_files(download_dir: &Utf8Path) -> Vec<(SupportedArchives, OsString)> {

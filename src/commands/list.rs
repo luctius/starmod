@@ -1,16 +1,13 @@
 use std::cmp::Ordering;
 
 use anyhow::Result;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use clap::Parser;
 use comfy_table::{Cell, Color};
 
 use crate::{
-    commands::{
-        conflict::{conflict_list_by_file, conflict_list_by_mod},
-        downloads::downloaded_files,
-        modlist::gather_mods,
-    },
+    conflict::{conflict_list_by_file, conflict_list_by_mod},
+    modlist::gather_mods,
     settings::{create_table, Settings},
     tag::Tag,
 };
@@ -19,7 +16,6 @@ use crate::{
 pub enum ListCmd {
     #[default]
     ModList,
-    Downloads,
     Conflicts,
     Files,
 }
@@ -27,10 +23,6 @@ impl ListCmd {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
         match self {
             Self::ModList => list_mods(&settings.cache_dir()),
-            Self::Downloads => {
-                //TODO also show wether or not it is allready installed
-                list_downloaded_files(&settings.download_dir(), &settings.cache_dir())
-            }
             Self::Conflicts => list_conflicts(&settings.cache_dir()),
             Self::Files => list_files(&settings.cache_dir()),
         }
@@ -104,31 +96,6 @@ pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
 
     log::info!("{table}");
 
-    Ok(())
-}
-
-pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
-    let sf = downloaded_files(download_dir);
-
-    let mut table = create_table(vec!["Archive", "Status"]);
-
-    for (_, f) in sf {
-        let mut archive = Utf8PathBuf::from(cache_dir);
-        let file = f.to_string_lossy().to_string().to_lowercase();
-        archive.push(file.clone());
-        archive.set_extension("ron");
-
-        table.add_row(vec![
-            Cell::new(f.to_string_lossy()).fg(Color::White),
-            Cell::new(match archive.exists() && archive.is_file() {
-                true => "Installed".to_string(),
-                false => "New".to_string(),
-            })
-            .fg(Color::White),
-        ]);
-    }
-
-    log::info!("{table}");
     Ok(())
 }
 

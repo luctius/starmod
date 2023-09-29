@@ -22,8 +22,6 @@ const EDITOR_ENV: &'static str = "EDITOR";
 
 #[derive(Error, Debug)]
 pub enum SettingErrors {
-    #[error("The app is run with an unknown name ({0}); Please use on of {1}.")]
-    WrongAppName(String, String),
     #[error("No valid config file could be found; Please run '{0} update-config' first.")]
     ConfigNotFound(String),
     #[error("The game directory for {0} cannot be found, Please run '{1} update-config' and provide manually.")]
@@ -46,6 +44,8 @@ pub enum SettingErrors {
         "The steam directory cannot be found, Please run '{0} update-config' and provide manually."
     )]
     NoSteamDirFound(String),
+    #[error("The game executable could not be found: {0}.")]
+    GameExeNotFound(Utf8PathBuf),
 }
 
 #[derive(

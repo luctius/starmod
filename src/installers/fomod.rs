@@ -172,7 +172,7 @@ impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
                     let destination = f.destination.clone().unwrap_or_else(|| String::new());
                     let source = Utf8PathBuf::from(f.source.clone().to_lowercase());
 
-                    files.push(InstallFile::new(source, dbg!(destination)));
+                    files.push(InstallFile::new(source, destination));
                 }
                 fomod::FileTypeEnum::Folder(f) => {
                     let mut f = f.clone();
@@ -269,11 +269,13 @@ fn select_all(
 }
 
 fn select_exactly_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<usize>> {
+    println!("");
     println!("Please select one of the following: ");
     for (i, p) in plugins.iter().enumerate() {
         println!("{}) {}: {}", i, p.name, p.description);
     }
     println!("E) Exit Installer");
+    println!("");
 
     let choice: u8 = loop {
         let input: Input = prompt_until_ok("Select : ");
@@ -293,12 +295,14 @@ fn select_exactly_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<u
 }
 
 fn select_at_least_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<usize>> {
+    println!("");
     println!("Please select at-least one of the following: ");
     for (i, p) in plugins.iter().enumerate() {
         println!("{}) {}: {}", i, p.name, p.description);
     }
     println!("D) Done with the selection");
     println!("E) Exit Installer");
+    println!("");
 
     let mut selected = false;
     let mut choices = Vec::with_capacity(4);
@@ -332,12 +336,14 @@ fn select_at_least_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<
 }
 
 fn select_at_most_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<usize>> {
+    println!("");
     println!("Please select at-most one of the following: ");
     for (i, p) in plugins.iter().enumerate() {
         println!("{}) {}: {}", i, p.name, p.description);
     }
     println!("D) Done with the selection");
     println!("E) Exit Installer");
+    println!("");
 
     let choice: Option<u8> = loop {
         let input: InputWithDone = prompt_until_ok("Select : ");
@@ -364,12 +370,14 @@ fn select_at_most_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<u
 }
 
 fn select_any(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<usize>> {
+    println!("");
     println!("Please select any of the following: ");
     for (i, p) in plugins.iter().enumerate() {
         println!("{}) {}: {}", i, p.name, p.description);
     }
     println!("D) Done with the selection");
     println!("E) Exit Installer");
+    println!("");
 
     let mut choices = Vec::with_capacity(4);
     loop {

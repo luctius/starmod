@@ -11,6 +11,7 @@ use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
 use crate::{
+    conflict::conflict_list_by_file,
     installers::{
         custom::create_custom_manifest,
         data::create_data_manifest,
@@ -20,6 +21,8 @@ use crate::{
     },
     manifest::{InstallFile, Manifest, ModState, MANIFEST_EXTENTION},
 };
+
+const BACKUP_EXTENTION: &'static str = "starmod_bkp";
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ModKind {
@@ -223,13 +226,17 @@ impl Mod {
             Self::Data(.., m) => m.priority(),
         }
     }
-    pub fn set_priority(&mut self, prio: isize) -> Result<()> {
+    pub fn set_priority(&mut self, prio: isize) -> Result<bool> {
         match self {
             Self::Data(_, m) => {
-                m.set_priority(prio);
+                if prio < 0 && m.mod_state().is_enabled() {
+                    return Ok(false);
+                } else {
+                    m.set_priority(prio);
+                }
             }
         }
-        self.write()
+        self.write().map(|_| true)
     }
     pub fn is_enabled(&self) -> bool {
         match self {
@@ -297,8 +304,8 @@ impl Mod {
                 //             log::debug!("overrule {} ({} > {})", destination, origin, target);
                 //         } else {
                 //             let bkp_destination = destination.with_file_name(format!(
-                //                 "{}.starmod_bkp",
-                //                 destination.extension().unwrap_or_default()
+                //                 "{}.{}",
+                //                 destination.extension().unwrap_or_default(), BACKUP_EXTENTION
                 //             ));
                 //             log::info!(
                 //                 "renaming foreign file from {} -> {}",
@@ -468,5 +475,138 @@ impl TryFrom<Utf8PathBuf> for Mod {
         }
 
         todo!()
+    }
+}
+
+pub trait ModList {
+    fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()>;
+    fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()>;
+}
+impl ModList for &mut [Mod] {
+    fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
+        let conflict_list = conflict_list_by_file(self)?;
+        let mut file_list = Vec::with_capacity(conflict_list.len());
+        let mut dir_cache = Vec::new();
+
+        for m in self.iter() {
+            file_list.extend(m.enlist_files(&conflict_list));
+        }
+
+        for f in file_list {
+            let origin = cache_dir.clone().join(f.source());
+            let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
+
+            let destination_base = destination.parent().unwrap().to_path_buf();
+            if !dir_cache.contains(&destination_base) {
+                //create intermediate directories
+                DirBuilder::new()
+                    .recursive(true)
+                    .create(&destination_base)?;
+                dir_cache.push(destination_base);
+            }
+
+            // Remove existing symlinks which point back to our archive dir
+            // This ensures that the last mod wins, but we should do conflict
+            // detection and resolution before this, so we can inform the user.
+            if destination.is_symlink() {
+                let target = Utf8PathBuf::try_from(read_link(&destination)?)?;
+
+                if target.starts_with(&cache_dir) {
+                    remove_file(&destination)?;
+                    log::debug!("overrule {} ({} > {})", destination, origin, target);
+                } else {
+                    let bkp_destination = destination.with_file_name(format!(
+                        "{}.{}",
+                        destination.extension().unwrap_or_default(),
+                        BACKUP_EXTENTION,
+                    ));
+                    log::info!(
+                        "renaming foreign file from {} -> {}",
+                        destination,
+                        bkp_destination
+                    );
+                    rename(&destination, bkp_destination)?;
+                }
+            }
+
+            std::os::unix::fs::symlink(&origin, &destination)?;
+
+            log::trace!("link {} to {}", origin, destination);
+        }
+
+        for m in self.iter_mut() {
+            m.set_enabled()?;
+        }
+
+        Ok(())
+    }
+    fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
+        let conflict_list = conflict_list_by_file(self)?;
+        let mut file_list = Vec::with_capacity(conflict_list.len());
+
+        for m in self.iter() {
+            if m.is_enabled() {
+                file_list.extend(m.enlist_files(&conflict_list));
+            }
+        }
+
+        for f in file_list {
+            let origin = cache_dir.clone().join(f.source());
+            let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
+
+            if destination.is_file()
+                && destination.is_symlink()
+                && read_link(&destination)? == origin
+            {
+                remove_file(&destination)?;
+                log::trace!("removed {} -> {}", destination, origin);
+            } else {
+                log::debug!("passing-over {}", destination);
+            }
+        }
+
+        let walker = WalkDir::new(&game_dir)
+            .min_depth(1)
+            .max_depth(usize::MAX)
+            .follow_links(false)
+            .same_file_system(true)
+            .contents_first(true);
+
+        for entry in walker {
+            let entry = entry?;
+            let entry_path = entry.path();
+
+            // Restore backupped files
+            if entry_path.is_file() {
+                if entry_path
+                    .extension()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or_default()
+                    == BACKUP_EXTENTION
+                {
+                    let new = entry_path.with_extension("");
+                    if !new.exists() {
+                        log::trace!(
+                            "Restoring Backup: {} -> {}.",
+                            &entry_path.display(),
+                            new.display()
+                        );
+                        rename(entry_path, new)?;
+                    }
+                }
+            }
+            // Remove empty directories
+            if entry_path.is_dir() {
+                log::trace!("removing dir {}.", entry_path.display());
+                let _ = remove_dir(entry_path);
+            }
+        }
+
+        for m in self.iter_mut() {
+            m.set_disabled()?;
+        }
+
+        Ok(())
     }
 }
