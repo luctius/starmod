@@ -48,6 +48,16 @@ impl Game {
             Self::Starfield => "sfse_loader.exe",
         }
     }
+    pub const fn loot_name(&self) -> &'static str {
+        match self {
+            Self::Starfield => "loot.exe",
+        }
+    }
+    pub const fn xedit_name(&self) -> &'static str {
+        match self {
+            Self::Starfield => "sfedit.exe",
+        }
+    }
     pub const fn ini_files(&self) -> &[&'static str] {
         match self {
             Self::Starfield => &["Starfield.ini", "StarfieldPrefs.ini", "StarfieldCustom.ini"],

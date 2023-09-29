@@ -2,7 +2,7 @@ use anyhow::Result;
 use camino::Utf8PathBuf;
 use clap::Parser;
 
-use crate::settings::Settings;
+use crate::settings::{LootType, RunCmdKind, Settings};
 
 #[derive(Debug, Clone, Parser, Default)]
 pub enum ConfigCmd {
@@ -21,12 +21,14 @@ pub enum ConfigCmd {
         compat_dir: Option<Utf8PathBuf>,
         #[arg(short, long)]
         editor: Option<String>,
-        // #[arg(short, long)]
-        // find_compat: bool,
-        // #[arg(short, long)]
-        // find_proton: bool,
-        // #[arg(short, long)]
-        // find_proton_home_dir: bool,
+        #[arg(short, long, value_enum)]
+        default_run: Option<RunCmdKind>,
+        #[arg(short, long)]
+        xedit_dir: Option<Utf8PathBuf>,
+        // #[arg(short, long, value_enum)]
+        // loot_type: Option<LootType>, FIXME
+        #[arg(long)]
+        loot_data_dir: Option<Utf8PathBuf>,
     },
 }
 impl ConfigCmd {
@@ -43,7 +45,12 @@ impl ConfigCmd {
                 proton_dir,
                 compat_dir,
                 editor,
+                default_run,
+                xedit_dir,
+                // loot_type,
+                loot_data_dir,
             } => {
+                let loot_type = None;
                 let settings = settings.create_config(
                     download_dir,
                     game_dir,
@@ -51,6 +58,10 @@ impl ConfigCmd {
                     proton_dir,
                     compat_dir,
                     editor,
+                    default_run,
+                    xedit_dir,
+                    loot_type,
+                    loot_data_dir,
                 )?;
                 log::info!("{}", &settings);
                 Ok(())

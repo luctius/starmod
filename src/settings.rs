@@ -8,6 +8,7 @@ use std::{
     fmt::Display,
     fs::File,
     io::{BufReader, Read, Write},
+    ops::Deref,
 };
 use thiserror::Error;
 use xdg::BaseDirectories;
@@ -15,7 +16,7 @@ use xdg::BaseDirectories;
 use camino::{Utf8Path, Utf8PathBuf};
 use log::LevelFilter;
 
-use crate::{dmodman::DModManConfig, game::Game};
+use crate::{commands::game::RunCmd, dmodman::DModManConfig, game::Game};
 
 const CONFIG_EXTENTION: &'static str = "ron";
 const EDITOR_ENV: &'static str = "EDITOR";
@@ -44,8 +45,27 @@ pub enum SettingErrors {
         "The steam directory cannot be found, Please run '{0} update-config' and provide manually."
     )]
     NoSteamDirFound(String),
-    #[error("The game executable could not be found: {0}.")]
-    GameExeNotFound(Utf8PathBuf),
+    #[error("The executable could not be found: {0}.")]
+    ExecutableNotFound(Utf8PathBuf),
+}
+
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, ValueEnum)]
+pub enum RunCmdKind {
+    Game,
+    Loader,
+    Loot,
+    XEdit,
+}
+impl From<RunCmdKind> for RunCmd {
+    fn from(value: RunCmdKind) -> Self {
+        todo!()
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub enum LootType {
+    Windows(Utf8PathBuf),
+    FlatPack,
 }
 
 #[derive(
@@ -97,6 +117,10 @@ pub struct Settings {
     proton_dir: Option<Utf8PathBuf>,
     compat_dir: Option<Utf8PathBuf>,
     steam_dir: Option<Utf8PathBuf>,
+    loot: LootType,
+    loot_data_dir: Utf8PathBuf,
+    xedit_dir: Option<Utf8PathBuf>,
+    default_run: Option<RunCmdKind>,
     editor: Option<String>,
 }
 impl Settings {
@@ -125,8 +149,10 @@ impl Settings {
 
         let editor = env::vars().find_map(|(key, val)| (key == EDITOR_ENV).then(|| val));
 
+        let loot = LootType::FlatPack;
         let proton_dir = None;
         let compat_dir = None;
+        let xedit_dir = None;
         let steam_dir = dirs::home_dir().map(|mut d| {
             d.push(".steam/steam");
             d
@@ -142,6 +168,14 @@ impl Settings {
         }
         .map(|sd| Utf8PathBuf::try_from(sd).unwrap());
 
+        let default_run = None;
+
+        let loot_data_dir = Utf8PathBuf::try_from(
+            xdg_base
+                .create_config_directory("loot")
+                .with_context(|| format!("Cannot create configuration directory for {}", name))?,
+        )?;
+
         Ok(Self {
             game,
             verbosity,
@@ -154,6 +188,10 @@ impl Settings {
             proton_dir,
             compat_dir,
             steam_dir,
+            loot,
+            loot_data_dir,
+            xedit_dir,
+            default_run,
         })
     }
     pub fn valid_config(&self) -> bool {
@@ -196,6 +234,18 @@ impl Settings {
     pub fn steam_dir(&self) -> Option<&Utf8Path> {
         self.steam_dir.as_deref()
     }
+    pub fn loot(&self) -> &LootType {
+        &self.loot
+    }
+    pub fn loot_data_dir(&self) -> &Utf8Path {
+        self.loot_data_dir.as_path()
+    }
+    pub fn xedit_dir(&self) -> Option<&Utf8Path> {
+        self.xedit_dir.as_deref()
+    }
+    pub fn default_run(&self) -> Option<RunCmdKind> {
+        self.default_run
+    }
     pub fn editor(&self) -> String {
         self.editor.clone().unwrap_or("xdg-open".to_owned())
     }
@@ -219,6 +269,10 @@ impl Settings {
         proton_dir: Option<Utf8PathBuf>,
         compat_dir: Option<Utf8PathBuf>,
         editor: Option<String>,
+        default_run: Option<RunCmdKind>,
+        xedit_dir: Option<Utf8PathBuf>,
+        loot_type: Option<LootType>,
+        loot_data_dir: Option<Utf8PathBuf>,
     ) -> Result<Self> {
         let mut settings = self.clone();
 
@@ -255,6 +309,10 @@ impl Settings {
         settings.proton_dir = proton_dir.or_else(|| self.proton_dir.clone());
         settings.compat_dir = compat_dir.or_else(|| self.compat_dir.clone());
         settings.editor = editor.or_else(|| self.editor.clone());
+        settings.default_run = default_run.or(self.default_run);
+        settings.xedit_dir = xedit_dir.or_else(|| self.xedit_dir.clone());
+        settings.loot_data_dir = loot_data_dir.unwrap_or_else(|| self.loot_data_dir.clone());
+        settings.loot = loot_type.unwrap_or_else(|| self.loot.clone());
 
         let mut file = File::create(&self.config_path)?;
 
