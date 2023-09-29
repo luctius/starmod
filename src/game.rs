@@ -1,6 +1,8 @@
 use camino::Utf8PathBuf;
-use loadorder::GameId;
 use serde::{Deserialize, Serialize};
+
+#[cfg(feature = "loadorder")]
+use loadorder::GameId;
 
 // const STEAM_APPS_NAME: &'static str = "steamapps";
 
@@ -25,6 +27,7 @@ impl Game {
             Self::Starfield => "starfield",
         }
     }
+    #[cfg(feature = "loadorder")]
     pub fn game_id(&self) -> GameId {
         match self {
             Self::Starfield => GameId::Starfield,

@@ -3,7 +3,6 @@ pub mod downloads;
 pub mod game;
 pub mod list;
 pub mod mods;
-pub mod plugins;
 pub mod purge;
 
 use anyhow::Result;
@@ -14,8 +13,13 @@ use crate::{settings::create_table, tag::Tag, Settings};
 
 use self::{
     config::ConfigCmd, downloads::DownloadCmd, game::GameCmd, list::ListCmd, mods::ModCmd,
-    plugins::PluginCmd, purge::PurgeCmd,
+    purge::PurgeCmd,
 };
+
+#[cfg(feature = "loadorder")]
+pub mod plugins;
+#[cfg(feature = "loadorder")]
+use self::plugins::PluginCmd;
 
 #[derive(Debug, Clone, Parser)]
 pub enum Subcommands {
@@ -54,11 +58,6 @@ pub enum Subcommands {
         #[command(subcommand)]
         cmd: Option<GameCmd>,
     },
-    /// Plugin related commands
-    Plugin {
-        #[command(subcommand)]
-        cmd: Option<PluginCmd>,
-    },
     /// Dangerous: removal of starmod's files
     Purge {
         #[command(subcommand)]
@@ -68,6 +67,13 @@ pub enum Subcommands {
     Legenda,
     /// Show information related to this build of starmod
     Version,
+
+    #[cfg(feature = "loadorder")]
+    /// Plugin related commands
+    Plugin {
+        #[command(subcommand)]
+        cmd: Option<PluginCmd>,
+    },
 }
 impl Subcommands {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
@@ -85,13 +91,15 @@ impl Subcommands {
                 DownloadCmd::execute(cmd.unwrap_or_default(), settings)
             }
             Subcommands::Game { cmd } => GameCmd::execute(cmd.unwrap_or_default(), settings),
-            Subcommands::Plugin { cmd } => PluginCmd::execute(cmd.unwrap_or_default(), settings),
             Subcommands::Purge { cmd } => PurgeCmd::execute(cmd, settings),
             Subcommands::Legenda => show_legenda(),
             Subcommands::Version => {
                 crate::print_build();
                 Ok(())
             }
+
+            #[cfg(feature = "loadorder")]
+            Subcommands::Plugin { cmd } => PluginCmd::execute(cmd.unwrap_or_default(), settings),
         }
     }
 }

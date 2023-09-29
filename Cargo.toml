@@ -42,10 +42,13 @@ camino = { version = "1.1.6", features = ["serde1"] } # TODO use camino instead 
 # clap-repl = "0.1"  # TODO: Can we use reedline-repl instead?
 
 # enum-kinds = "0.5.1"
-libloadorder = {git = "https://github.com/Ortham/libloadorder.git", branch = "starfield"}
+libloadorder = {git = "https://github.com/Ortham/libloadorder.git", branch = "starfield", optional=true}
 
 [build-dependencies]
 shadow-rs = "0.21.0"
+
+[features]
+loadorder = ["libloadorder"]
 
 [profile.release]
 codegen-units = 1
