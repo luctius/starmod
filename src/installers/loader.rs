@@ -37,17 +37,15 @@ pub fn create_loader_manifest(
             if let Some(ext) = entry_path.extension() {
                 match ext {
                     "dll" | "exe" => {
-                        dbg!(&entry_path);
                         let file = entry_path
                             .to_path_buf()
                             .strip_prefix(&archive_dir)?
                             .to_path_buf();
-                        dbg!(&file);
 
-                        files.push(dbg!(InstallFile::new(
+                        files.push(InstallFile::new(
                             file.clone(),
                             file.file_name().unwrap().to_string(),
-                        )));
+                        ));
                     }
                     _ => (),
                 }

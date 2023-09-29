@@ -260,7 +260,7 @@ impl Manifest {
             }
         }
 
-        dbg!(enlisted_files)
+        enlisted_files
     }
     pub fn disabled_files(&self) -> &[InstallFile] {
         &self.disabled_files
