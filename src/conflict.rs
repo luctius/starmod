@@ -26,24 +26,24 @@ pub fn conflict_list_by_file(mods: &[Mod]) -> Result<HashMap<String, Vec<String>
     let mut all_files = HashMap::new();
 
     // populate with all files
-    mods.iter().for_each(|m| {
+    for m in mods.iter() {
         if m.is_enabled() {
-            m.dest_files().iter().for_each(|f| {
+            m.dest_files()?.iter().for_each(|f| {
                 all_files.insert(f.clone(), Vec::new());
             })
         }
-    });
+    }
 
     // insert conflicting mods
-    mods.iter().for_each(|m| {
+    for m in mods.iter() {
         if m.is_enabled() {
-            m.dest_files().iter().for_each(|f| {
+            m.dest_files()?.iter().for_each(|f| {
                 if let Some(v) = all_files.get_mut(f) {
                     v.push(m.name().to_string());
                 }
             })
         }
-    });
+    }
 
     // Remove all files without conflicts
     all_files.retain(|_k, v| v.len() > 1);
@@ -55,15 +55,15 @@ pub fn conflict_list_by_mod(mods: &[Mod]) -> Result<HashMap<String, Conflicts>> 
     let list = conflict_list_by_file(mods)?;
 
     let mut mods_conflicts = HashMap::new();
-    mods.iter().for_each(|m| {
+    for m in mods.iter() {
         let mut conflicts = Vec::new();
         let mut losing = HashSet::new();
         let mut winning = HashSet::new();
 
-        list.iter().for_each(|(f, vec)| {
+        for (f, vec) in list.iter() {
             let mut found_self = false;
 
-            if m.dest_files().contains(f) {
+            if m.dest_files()?.contains(f) {
                 for a in vec.iter() {
                     if a.as_str() == m.name() {
                         found_self = true;
@@ -75,7 +75,7 @@ pub fn conflict_list_by_mod(mods: &[Mod]) -> Result<HashMap<String, Conflicts>> 
                     }
                 }
             }
-        });
+        }
 
         if !conflicts.is_empty() {
             mods_conflicts.insert(
@@ -87,7 +87,7 @@ pub fn conflict_list_by_mod(mods: &[Mod]) -> Result<HashMap<String, Conflicts>> 
                 },
             );
         }
-    });
+    }
 
     Ok(mods_conflicts)
 }

@@ -3,6 +3,7 @@ use thiserror::Error;
 pub mod custom;
 pub mod data;
 pub mod fomod;
+pub mod label;
 pub mod loader;
 
 // These are existing directories in the Starfield game dir

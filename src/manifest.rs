@@ -90,6 +90,25 @@ impl InstallFile {
     pub fn destination(&self) -> &str {
         &self.destination
     }
+    pub fn enlist(mod_dir: &Utf8Path, source: &Utf8Path, destination: &str) -> Self {
+        let destination = format!(
+            "{}/{}",
+            DATA_DIR_NAME,
+            destination
+                .strip_prefix("data")
+                .unwrap_or(destination)
+                .to_lowercase()
+        )
+        .replace("//", "/")
+        .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME));
+
+        log::trace!("New InstallFile: {} -> {}", source, destination);
+
+        Self {
+            source: mod_dir.join(source),
+            destination,
+        }
+    }
 }
 impl From<Utf8PathBuf> for InstallFile {
     fn from(pb: Utf8PathBuf) -> Self {
@@ -247,55 +266,55 @@ impl Manifest {
         }
         origin_files
     }
-    pub fn enlist_files(&self, conflict_list: &HashMap<String, Vec<String>>) -> Vec<InstallFile> {
-        let mut enlisted_files = Vec::new();
+    // pub fn enlist_files(&self, conflict_list: &HashMap<String, Vec<String>>) -> Vec<InstallFile> {
+    //     let mut enlisted_files = Vec::new();
 
-        for f in &self.files {
-            if let Some(winners) = conflict_list.get(&f.destination) {
-                if let Some(winner) = winners.last() {
-                    if *winner == self.name {
-                        enlisted_files.push(InstallFile {
-                            source: self.manifest_dir.to_path_buf().join(f.source.clone()),
-                            destination: f.destination.clone(),
-                        });
-                    }
-                }
-            } else {
-                enlisted_files.push(InstallFile {
-                    source: self.manifest_dir.to_path_buf().join(f.source.clone()),
-                    destination: f.destination.clone(),
-                });
-            }
-        }
+    //     for f in &self.files {
+    //         if let Some(winners) = conflict_list.get(&f.destination) {
+    //             if let Some(winner) = winners.last() {
+    //                 if *winner == self.name {
+    //                     enlisted_files.push(InstallFile {
+    //                         source: self.manifest_dir.to_path_buf().join(f.source.clone()),
+    //                         destination: f.destination.clone(),
+    //                     });
+    //                 }
+    //             }
+    //         } else {
+    //             enlisted_files.push(InstallFile {
+    //                 source: self.manifest_dir.to_path_buf().join(f.source.clone()),
+    //                 destination: f.destination.clone(),
+    //             });
+    //         }
+    //     }
 
-        enlisted_files
-    }
+    //     enlisted_files
+    // }
     pub fn disabled_files(&self) -> &[InstallFile] {
         &self.disabled_files
     }
     pub fn priority(&self) -> isize {
         self.priority
     }
-    pub fn find_config_files(&self, ext: Option<&str>) -> Vec<Utf8PathBuf> {
-        let mut config_files = Vec::new();
+    // pub fn find_config_files(&self, ext: Option<&str>) -> Vec<Utf8PathBuf> {
+    //     let mut config_files = Vec::new();
 
-        let ext_vec = if let Some(ext) = ext {
-            vec![ext]
-        } else {
-            vec!["ini", "json", "yaml", "xml", "config", "toml"]
-        };
+    //     let ext_vec = if let Some(ext) = ext {
+    //         vec![ext]
+    //     } else {
+    //         vec!["ini", "json", "yaml", "xml", "config", "toml"]
+    //     };
 
-        for f in self.origin_files() {
-            if let Some(file_ext) = f.extension() {
-                let file_ext = file_ext.to_string();
+    //     for f in self.origin_files() {
+    //         if let Some(file_ext) = f.extension() {
+    //             let file_ext = file_ext.to_string();
 
-                if ext_vec.contains(&file_ext.as_str()) {
-                    config_files.push(f);
-                }
-            }
-        }
-        config_files
-    }
+    //             if ext_vec.contains(&file_ext.as_str()) {
+    //                 config_files.push(f);
+    //             }
+    //         }
+    //     }
+    //     config_files
+    // }
 }
 impl TryFrom<File> for Manifest {
     type Error = anyhow::Error;

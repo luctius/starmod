@@ -33,6 +33,8 @@ pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
     let mod_list = gather_mods(cache_dir)?;
     let conflict_list = conflict_list_by_mod(&mod_list)?;
 
+    //TODO: create seperate tables for each label we encounter.
+
     let mut table = create_table(vec![
         "Index", "Name", "Priority", "Status", "Version", "Nexus Id", "Mod Type",
     ]);
@@ -54,7 +56,7 @@ pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
             let mut file_not_lost = false;
             let conflict_list = conflict_list_by_file(&mod_list)?;
 
-            for f in md.dest_files() {
+            for f in md.dest_files()? {
                 if let Some(contenders) = conflict_list.get(&f) {
                     if let Some(c) = contenders.last() {
                         if c == md.name() {
@@ -106,7 +108,7 @@ pub fn list_conflicts(cache_dir: &Utf8Path) -> Result<()> {
 
     for m in mod_list {
         files.extend(
-            m.files()
+            m.files()?
                 .iter()
                 .map(|i| (i.clone(), (m.name().to_owned(), m.priority()))),
         );
@@ -160,7 +162,11 @@ pub fn list_files(cache_dir: &Utf8Path) -> Result<()> {
     let mut files = Vec::new();
 
     for m in &mod_list {
-        files.extend(m.files().iter().map(|i| (i, (m.name(), m.priority()))));
+        files.extend(
+            m.files()?
+                .iter()
+                .map(|i| (i.clone(), (m.name(), m.priority()))),
+        );
     }
 
     files.sort_unstable_by(|(ia, (_, pa)), (ib, (_, pb))| {

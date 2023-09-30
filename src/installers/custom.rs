@@ -54,7 +54,7 @@ pub fn create_custom_manifest(
     let version = Some("Custom".to_owned());
     let nexus_id = None;
 
-    Ok(Manifest::new(
+    let mut m = Manifest::new(
         name,
         name.to_string(),
         nexus_id,
@@ -62,5 +62,8 @@ pub fn create_custom_manifest(
         files,
         disabled_files,
         mod_kind,
-    ))
+    );
+
+    m.set_priority(1000);
+    Ok(m)
 }

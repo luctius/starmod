@@ -25,6 +25,9 @@ pub enum ModCmd {
         custom_mod: String,
         file_name: String,
     },
+    CreateLabel {
+        name: String,
+    },
     CreateCustom {
         name: String,
         origin: Option<Utf8PathBuf>,
@@ -66,9 +69,6 @@ pub enum ModCmd {
     SetPriority {
         name: String,
         priority: isize,
-    },
-    UpdateCustom {
-        name: String,
     },
 }
 impl ModCmd {
@@ -113,9 +113,16 @@ impl ModCmd {
                     log::info!("Creating custom mod {}", &name);
                     DirBuilder::new().recursive(true).create(destination)?;
                 }
-                let mut manifest =
+                let _ =
                     ModKind::Custom.create_mod(&settings.cache_dir(), &Utf8PathBuf::from(name))?;
-                manifest.set_priority(10000)?;
+                Ok(())
+            }
+            Self::CreateLabel { name } => {
+                let destination = settings.cache_dir().join(&name);
+                log::info!("Creating label {}", &name);
+                DirBuilder::new().recursive(true).create(destination)?;
+                let _ =
+                    ModKind::Label.create_mod(&settings.cache_dir(), &Utf8PathBuf::from(name))?;
                 Ok(())
             }
             Self::Remove { name } => {
@@ -163,21 +170,6 @@ impl ModCmd {
                 }
                 Ok(())
             }
-            //TODO: this should not be neccesary
-            Self::UpdateCustom { name } => {
-                let mod_list = gather_mods(&settings.cache_dir())?;
-                if let Some((old_mod, _idx)) = find_mod(&mod_list, &name) {
-                    log::info!("Updating mod '{}'", old_mod.name());
-                    let name = old_mod.name();
-                    let mut new_mod = ModKind::Custom
-                        .create_mod(&settings.cache_dir(), &Utf8PathBuf::from(name))?;
-                    new_mod.set_priority(old_mod.priority())?;
-                    if old_mod.is_enabled() {
-                        new_mod.enable(&settings.cache_dir(), &settings.game_dir())?;
-                    }
-                }
-                Ok(())
-            }
             Self::CopyToCustom {
                 origin_mod,
                 custom_mod,
@@ -187,7 +179,7 @@ impl ModCmd {
                 if let Some((origin_mod, _idx)) = find_mod(&mod_list, &origin_mod) {
                     if let Some((custom_mod, _idx)) = find_mod(&mod_list, &custom_mod) {
                         if let Some(file) = origin_mod
-                            .origin_files()
+                            .origin_files()?
                             .iter()
                             .find(|f| f.file_name().unwrap().eq(file_name.as_str()))
                         {
@@ -265,9 +257,9 @@ fn show_mod_status(md: &Mod, mod_list: &[Mod]) -> Result<()> {
     log::info!("{table}");
 
     let mut files = md
-        .files()
+        .files()?
         .iter()
-        .map(|i| (i, (md.name(), md.priority())))
+        .map(|i| (i.clone(), (md.name(), md.priority())))
         .collect::<Vec<_>>();
 
     files.sort_unstable_by(|(ia, (_, pa)), (ib, (_, pb))| {
@@ -318,8 +310,8 @@ fn edit_mod_config_files(
 ) -> Result<()> {
     let mut config_files_to_edit = Vec::new();
     let mod_list = gather_mods(&settings.cache_dir())?;
-    if let Some((manifest, _idx)) = modlist::find_mod(&mod_list, &name) {
-        let config_list = manifest.find_config_files(extension.as_deref());
+    if let Some((md, _idx)) = modlist::find_mod(&mod_list, &name) {
+        let config_list = md.find_config_files(extension.as_deref())?;
         if let Some(config_name) = config_name {
             if let Some(cf) = config_list
                 .iter()

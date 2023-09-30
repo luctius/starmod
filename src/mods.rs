@@ -1,6 +1,5 @@
 use std::{
     collections::{HashMap, HashSet},
-    ffi::OsString,
     fmt::Display,
     fs::{read_link, remove_dir, remove_file, rename, DirBuilder, File},
 };
@@ -16,8 +15,8 @@ use crate::{
         custom::create_custom_manifest,
         data::create_data_manifest,
         fomod::{create_fomod_manifest, FOMOD_INFO_FILE, FOMOD_MODCONFIG_FILE},
+        label::create_label_manifest,
         loader::create_loader_manifest,
-        InstallerError,
     },
     manifest::{InstallFile, Manifest, ModState, MANIFEST_EXTENTION},
     modlist::gather_mods,
@@ -36,7 +35,7 @@ pub enum ModKind {
     // Custom Mods, should always scan their files
     Custom,
     // Virtual mod to better organise the list
-    // Label,
+    Label,
 }
 impl ModKind {
     pub fn detect_mod_type(cache_dir: &Utf8Path, name: &Utf8Path) -> Result<Self> {
@@ -94,6 +93,10 @@ impl ModKind {
     }
     pub fn create_mod(self, cache_dir: &Utf8Path, name: &Utf8Path) -> Result<Mod> {
         let md = match self {
+            Self::Label => Mod::Label(
+                cache_dir.to_path_buf(),
+                create_label_manifest(self, cache_dir, name)?,
+            ),
             Self::FoMod => Mod::Data(
                 cache_dir.to_path_buf(),
                 create_fomod_manifest(self, cache_dir, name)?,
@@ -102,73 +105,12 @@ impl ModKind {
                 cache_dir.to_path_buf(),
                 create_loader_manifest(self, cache_dir, name)?,
             ),
-            Self::Custom => Mod::Data(
+            Self::Custom => Mod::Custom(
                 cache_dir.to_path_buf(),
                 create_custom_manifest(self, cache_dir, name)?,
             ),
             Self::Data => Mod::Data(cache_dir.to_path_buf(), {
-                let manifest_dir = cache_dir.join(name);
-                let mut data_path = None;
-                let walker = WalkDir::new(&manifest_dir)
-                    .min_depth(1)
-                    .max_depth(2)
-                    .follow_links(false)
-                    .same_file_system(true)
-                    .contents_first(true);
-
-                for entry in walker {
-                    let entry = entry?;
-                    let entry_path = entry.path();
-                    if entry_path.is_dir()
-                        && entry.path().file_name().unwrap() == OsString::from("data")
-                    {
-                        if data_path.is_none() {
-                            let entry_path = entry_path.to_path_buf();
-                            data_path = Some(entry_path.strip_prefix(&manifest_dir)?.to_path_buf());
-                        } else {
-                            Err(InstallerError::MultipleDataDirectories(name.to_string()))?;
-                        }
-                    }
-                }
-
-                if data_path.is_none() {
-                    let walker = WalkDir::new(&manifest_dir)
-                        .min_depth(3)
-                        .max_depth(5)
-                        .follow_links(false)
-                        .same_file_system(true)
-                        .contents_first(true);
-
-                    for entry in walker {
-                        let entry = entry?;
-                        let entry_path = entry.path();
-                        if entry_path.is_dir()
-                            && entry.path().file_name().unwrap() == OsString::from("data")
-                        {
-                            if data_path.is_none() {
-                                data_path = Some(
-                                    entry_path
-                                        .to_path_buf()
-                                        .strip_prefix(&manifest_dir)?
-                                        .to_path_buf(),
-                                );
-                            } else {
-                                Err(InstallerError::MultipleDataDirectories(name.to_string()))?;
-                            }
-                        }
-                    }
-                }
-
-                create_data_manifest(
-                    self,
-                    cache_dir,
-                    name,
-                    data_path
-                        .unwrap_or_default()
-                        .to_string_lossy()
-                        .to_string()
-                        .as_str(),
-                )
+                create_data_manifest(self, cache_dir, name)
             }?),
         };
 
@@ -189,7 +131,7 @@ impl Display for ModKind {
             Self::FoMod => f.write_str("FoMod"),
             Self::Loader => f.write_str("Loader"),
             Self::Custom => f.write_str("Custom"),
-            // Self::Label => f.write_str("Label"),
+            Self::Label => f.write_str("Label"),
         }
     }
 }
@@ -198,25 +140,26 @@ impl Display for ModKind {
 pub enum Mod {
     // Goes into Data
     Data(Utf8PathBuf, Manifest),
+    Custom(Utf8PathBuf, Manifest),
     // Virtual mod to better organise the list
-    // Label(Manifest),
+    Label(Utf8PathBuf, Manifest),
 }
 //TODO let mods also contain the cache_dir
 //so they can write the manifest file on each chance.
 impl Mod {
     pub fn kind(&self) -> ModKind {
         match self {
-            Self::Data(.., m) => m.mod_kind(),
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(.., m) => m.mod_kind(),
         }
     }
     pub fn name(&self) -> &str {
         match self {
-            Self::Data(.., m) => m.name(),
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(.., m) => m.name(),
         }
     }
     pub fn set_name(&mut self, name: String) -> Result<()> {
         match self {
-            Self::Data(_, m) => {
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(_, m) => {
                 m.set_name(name);
             }
         }
@@ -224,12 +167,12 @@ impl Mod {
     }
     pub fn priority(&self) -> isize {
         match self {
-            Self::Data(.., m) => m.priority(),
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(.., m) => m.priority(),
         }
     }
     pub fn set_priority(&mut self, prio: isize) -> Result<bool> {
         match self {
-            Self::Data(_, m) => {
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(_, m) => {
                 if prio < 0 && m.mod_state().is_enabled() {
                     return Ok(false);
                 } else {
@@ -241,22 +184,26 @@ impl Mod {
     }
     pub fn is_enabled(&self) -> bool {
         match self {
-            Self::Data(.., m) => m.mod_state().is_enabled(),
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(.., m) => {
+                m.mod_state().is_enabled()
+            }
         }
     }
     pub fn mod_state(&self) -> ModState {
         match self {
-            Self::Data(.., m) => m.mod_state(),
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(.., m) => m.mod_state(),
         }
     }
     pub fn version(&self) -> Option<&str> {
         match self {
             Self::Data(.., m) => m.version(),
+            Self::Label(..) | Self::Custom(..) => None,
         }
     }
     pub fn nexus_id(&self) -> Option<u32> {
         match self {
             Self::Data(.., m) => m.nexus_id(),
+            Self::Label(..) | Self::Custom(..) => None,
         }
     }
     pub fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
@@ -305,49 +252,135 @@ impl Mod {
         Ok(())
     }
 
-    pub fn enlist_files(&self, conflict_list: &HashMap<String, Vec<String>>) -> Vec<InstallFile> {
+    pub fn enlist_files(
+        &self,
+        conflict_list: &HashMap<String, Vec<String>>,
+    ) -> Result<Vec<InstallFile>> {
         match self {
-            Self::Data(.., m) => m.enlist_files(conflict_list),
+            Self::Data(..) | Self::Custom(..) => {
+                let mut enlisted_files = Vec::new();
+
+                for f in &self.files()? {
+                    if let Some(winners) = conflict_list.get(f.destination()) {
+                        if let Some(winner) = winners.last() {
+                            if *winner == self.name() {
+                                enlisted_files.push(InstallFile::enlist(
+                                    self.manifest_dir(),
+                                    f.source(),
+                                    f.destination(),
+                                ))
+                            }
+                        }
+                    } else {
+                        enlisted_files.push(InstallFile::enlist(
+                            self.manifest_dir(),
+                            f.source(),
+                            f.destination(),
+                        ))
+                    }
+                }
+
+                Ok(enlisted_files)
+            }
+            Self::Label(..) => Ok(vec![]),
         }
     }
     pub fn manifest_dir(&self) -> &Utf8Path {
         match self {
-            Self::Data(.., m) => m.manifest_dir(),
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(.., m) => m.manifest_dir(),
         }
     }
-    pub fn origin_files(&self) -> Vec<Utf8PathBuf> {
+    pub fn origin_files(&self) -> Result<Vec<Utf8PathBuf>> {
         match self {
-            Self::Data(.., m) => m.origin_files(),
+            Self::Data(.., m) => Ok(m.origin_files()),
+            Self::Custom(..) => Ok(self
+                .files()?
+                .iter()
+                .map(|isf| isf.source().to_path_buf())
+                .collect::<Vec<_>>()),
+            Self::Label(..) => Ok(vec![]),
         }
     }
-    pub fn dest_files(&self) -> Vec<String> {
+    pub fn dest_files(&self) -> Result<Vec<String>> {
         match self {
-            Self::Data(.., m) => m.dest_files(),
+            Self::Data(.., m) => Ok(m.dest_files()),
+            Self::Custom(..) => Ok(self
+                .files()?
+                .iter()
+                .map(|isf| isf.destination().to_lowercase())
+                .collect::<Vec<_>>()),
+            Self::Label(..) => Ok(vec![]),
         }
     }
-    pub fn files(&self) -> &[InstallFile] {
+    pub fn files(&self) -> Result<Vec<InstallFile>> {
         match self {
-            Self::Data(.., m) => m.files(),
+            Self::Data(.., m) => Ok(m.files().to_vec()),
+            Self::Custom(dir, _) => {
+                let mut files = Vec::new();
+                let walker = WalkDir::new(&dir)
+                    .min_depth(1)
+                    .max_depth(usize::MAX)
+                    .follow_links(false)
+                    .same_file_system(true)
+                    .contents_first(true);
+
+                for entry in walker {
+                    let entry = entry?;
+                    let entry_path = Utf8PathBuf::try_from(entry.path().to_path_buf())?;
+
+                    files.push(entry_path.into());
+                }
+
+                Ok(files)
+            }
+            Self::Label(..) => Ok(vec![]),
         }
     }
     pub fn disabled_files(&self) -> &[InstallFile] {
         match self {
             Self::Data(.., m) => m.disabled_files(),
+            Self::Label(..) | Self::Custom(..) => &[],
         }
     }
     pub fn remove(&self, cache_dir: &Utf8Path) -> Result<()> {
         match self {
-            Self::Data(.., m) => m.remove(cache_dir),
+            Self::Custom(.., m) | Self::Data(.., m) => m.remove(cache_dir),
+            Self::Label(.., m) => {
+                let mut path = Utf8PathBuf::from(cache_dir).join(m.manifest_dir());
+                path.set_extension(MANIFEST_EXTENTION);
+                remove_file(&path)?;
+                Ok(())
+            }
         }
     }
-    pub fn find_config_files(&self, extension: Option<&str>) -> Vec<Utf8PathBuf> {
+    pub fn find_config_files(&self, extension: Option<&str>) -> Result<Vec<Utf8PathBuf>> {
         match self {
-            Self::Data(.., m) => m.find_config_files(extension),
+            Self::Data(..) | Self::Custom(..) => {
+                let mut config_files = Vec::new();
+
+                let ext_vec = if let Some(ext) = extension {
+                    vec![ext]
+                } else {
+                    vec!["ini", "json", "yaml", "xml", "config", "toml"]
+                };
+
+                for f in self.origin_files()? {
+                    if let Some(file_ext) = f.extension() {
+                        let file_ext = file_ext.to_string();
+
+                        if ext_vec.contains(&file_ext.as_str()) {
+                            config_files.push(f);
+                        }
+                    }
+                }
+                Ok(config_files)
+            }
+            Self::Label(..) => Ok(vec![]),
         }
     }
     fn write(&self) -> Result<()> {
         match self {
-            Self::Data(dir, m) => {
+            Self::Label(dir, m) | Self::Custom(dir, m) | Self::Data(dir, m) => {
                 m.write_manifest(dir)?;
             }
         }
@@ -355,7 +388,7 @@ impl Mod {
     }
     fn set_enabled(&mut self) -> Result<()> {
         match self {
-            Self::Data(_, m) => {
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(_, m) => {
                 m.set_enabled();
             }
         }
@@ -363,7 +396,7 @@ impl Mod {
     }
     fn set_disabled(&mut self) -> Result<()> {
         match self {
-            Self::Data(_, m) => {
+            Self::Label(.., m) | Self::Custom(.., m) | Self::Data(_, m) => {
                 m.set_disabled();
             }
         }
@@ -385,9 +418,11 @@ impl TryFrom<Utf8PathBuf> for Mod {
         if let Ok(file) = File::open(&path) {
             if let Ok(manifest) = Manifest::try_from(file) {
                 return Ok(match manifest.mod_kind() {
-                    ModKind::FoMod | ModKind::Loader | ModKind::Custom | ModKind::Data => {
+                    ModKind::FoMod | ModKind::Loader | ModKind::Data => {
                         Mod::Data(path.parent().unwrap().to_path_buf(), manifest)
                     }
+                    ModKind::Custom => Mod::Custom(path.parent().unwrap().to_path_buf(), manifest),
+                    ModKind::Label => Mod::Label(path.parent().unwrap().to_path_buf(), manifest),
                 });
             }
         }
@@ -420,7 +455,7 @@ impl ModList for &mut [Mod] {
 
         log::debug!("Collecting File List");
         for m in self.iter() {
-            file_list.extend(m.enlist_files(&conflict_list));
+            file_list.extend(m.enlist_files(&conflict_list)?);
         }
 
         log::trace!("file_list: {:?}", file_list);
@@ -484,7 +519,7 @@ impl ModList for &mut [Mod] {
         log::debug!("Collecting File List");
         for m in self.iter() {
             if m.is_enabled() {
-                file_list.extend(m.enlist_files(&conflict_list));
+                file_list.extend(m.enlist_files(&conflict_list)?);
             }
         }
 
