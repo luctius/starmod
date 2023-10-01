@@ -90,27 +90,6 @@ impl InstallFile {
     pub fn destination(&self) -> &str {
         &self.destination
     }
-    pub fn enlist(mod_dir: &Utf8Path, source: &Utf8Path, destination: &str) -> Self {
-        dbg!(destination);
-        // let destination = dbg!(format!(
-        //     "{}/{}",
-        //     DATA_DIR_NAME,
-        //     destination
-        //         .strip_prefix("data")
-        //         .unwrap_or(destination)
-        //         .to_lowercase()
-        // )
-        // .replace("//", "/")
-        // .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME)));
-        let destination = destination.to_owned();
-
-        log::trace!("New InstallFile: {} -> {}", source, destination);
-
-        Self {
-            source: mod_dir.join(source),
-            destination,
-        }
-    }
 }
 impl From<Utf8PathBuf> for InstallFile {
     fn from(pb: Utf8PathBuf) -> Self {
