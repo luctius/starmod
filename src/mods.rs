@@ -140,6 +140,7 @@ impl Display for ModKind {
 pub enum Mod {
     // Goes into Data
     Data(Utf8PathBuf, Manifest),
+    //Loader(Utf8PathBuf, Manifest),
     Custom(Utf8PathBuf, Manifest),
     // Virtual mod to better organise the list
     Label(Utf8PathBuf, Manifest),
@@ -264,18 +265,16 @@ impl Mod {
                     if let Some(winners) = conflict_list.get(f.destination()) {
                         if let Some(winner) = winners.last() {
                             if *winner == self.name() {
-                                enlisted_files.push(InstallFile::enlist(
-                                    self.manifest_dir(),
-                                    f.source(),
-                                    f.destination(),
+                                enlisted_files.push(InstallFile::new_raw(
+                                    self.manifest_dir().join(f.source()),
+                                    f.destination().to_owned(),
                                 ))
                             }
                         }
                     } else {
-                        enlisted_files.push(InstallFile::enlist(
-                            self.manifest_dir(),
-                            f.source(),
-                            f.destination(),
+                        enlisted_files.push(InstallFile::new_raw(
+                            self.manifest_dir().join(f.source()),
+                            f.destination().to_owned(),
                         ))
                     }
                 }
@@ -315,9 +314,9 @@ impl Mod {
     pub fn files(&self) -> Result<Vec<InstallFile>> {
         match self {
             Self::Data(.., m) => Ok(m.files().to_vec()),
-            Self::Custom(dir, _) => {
+            Self::Custom(dir, m) => {
                 let mut files = Vec::new();
-                let walker = WalkDir::new(&dir)
+                let walker = WalkDir::new(dir.join(m.manifest_dir()))
                     .min_depth(1)
                     .max_depth(usize::MAX)
                     .follow_links(false)
@@ -326,9 +325,16 @@ impl Mod {
 
                 for entry in walker {
                     let entry = entry?;
-                    let entry_path = Utf8PathBuf::try_from(entry.path().to_path_buf())?;
+                    let entry_path = Utf8PathBuf::try_from(
+                        entry
+                            .path()
+                            .strip_prefix(dir)?
+                            .strip_prefix(m.manifest_dir())?
+                            .to_path_buf(),
+                    )?;
 
                     files.push(entry_path.into());
+                    // dbg!(entry_path);
                 }
 
                 Ok(files)
@@ -464,6 +470,7 @@ impl ModList for &mut [Mod] {
         for f in file_list {
             let origin = cache_dir.clone().join(f.source());
             let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
+            log::trace!("starting with file: {} -> {}", origin, destination);
 
             let destination_base = destination.parent().unwrap().to_path_buf();
             if !dir_cache.contains(&destination_base) {
@@ -575,7 +582,7 @@ impl ModList for &mut [Mod] {
             }
             // Remove empty directories
             if entry_path.is_dir() {
-                log::debug!("removing dir {}.", entry_path.display());
+                log::debug!("Trying to remove dir {}.", entry_path.display());
                 let _ = remove_dir(entry_path);
             }
         }
