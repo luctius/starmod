@@ -140,13 +140,18 @@ fn decompress_zip_with_permission_override(
 
         file.enclosed_name();
         let destination = destination_path.join(file.enclosed_name().unwrap());
-        if destination.is_file() {
+        log::trace!("Extracting: {}", destination.display());
+
+        // VERY crude way of checking if the destination is a file..
+        // if destination.extension().is_some() {
+        if file.is_file() {
+            log::trace!("Creating Dir: {}", destination.parent().unwrap().display());
             DirBuilder::new()
                 .mode(0o755)
                 .recursive(true)
                 .create(destination.parent().unwrap())?;
 
-            // let mut dest_file = dbg!(File::open(&destination)?);
+            log::trace!("Creating File: {}", destination.display());
             let mut dest_file = OpenOptions::new()
                 .create(true)
                 .write(true)
@@ -158,11 +163,6 @@ fn decompress_zip_with_permission_override(
                 destination,
                 Permissions::from_mode(file.unix_mode().unwrap_or(0o755)),
             )?;
-        } else {
-            DirBuilder::new()
-                .mode(0o755)
-                .recursive(true)
-                .create(destination)?;
         }
     }
 
