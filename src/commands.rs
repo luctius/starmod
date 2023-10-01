@@ -12,7 +12,11 @@ use comfy_table::{Cell, Color};
 use crate::{settings::create_table, tag::Tag, Settings};
 
 use self::{
-    config::ConfigCmd, downloads::DownloadCmd, game::GameCmd, list::ListCmd, mods::ModCmd,
+    config::ConfigCmd,
+    downloads::DownloadCmd,
+    game::{GameCmd, RunCmd},
+    list::ListCmd,
+    mods::ModCmd,
     purge::PurgeCmd,
 };
 
@@ -58,10 +62,10 @@ pub enum Subcommands {
         #[command(subcommand)]
         cmd: Option<GameCmd>,
     },
-    /// Alias for Game
+    /// Alias for Game Run
     Run {
         #[command(subcommand)]
-        cmd: Option<GameCmd>,
+        cmd: Option<RunCmd>,
     },
     /// Dangerous: removal of starmod's files
     Purge {
@@ -95,9 +99,8 @@ impl Subcommands {
             Subcommands::Download { cmd } | Subcommands::Downloads { cmd } => {
                 DownloadCmd::execute(cmd.unwrap_or_default(), settings)
             }
-            Subcommands::Run { cmd } | Subcommands::Game { cmd } => {
-                GameCmd::execute(cmd.unwrap_or_default(), settings)
-            }
+            Subcommands::Run { cmd } => RunCmd::execute(cmd.unwrap_or_default(), settings),
+            Subcommands::Game { cmd } => GameCmd::execute(cmd.unwrap_or_default(), settings),
             Subcommands::Purge { cmd } => PurgeCmd::execute(cmd, settings),
             Subcommands::Legenda => show_legenda(),
             Subcommands::Version => {
