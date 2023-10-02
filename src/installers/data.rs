@@ -122,6 +122,7 @@ pub fn create_data_manifest(
     }
 
     Ok(Manifest::new(
+        cache_dir,
         manifest_dir.as_path(),
         name,
         nexus_id,

@@ -215,29 +215,7 @@ impl Mod {
         conflict_list: &HashMap<String, Vec<String>>,
     ) -> Result<Vec<InstallFile>> {
         match self {
-            Self::Data(..) | Self::Custom(..) => {
-                let mut enlisted_files = Vec::new();
-
-                for f in &self.files()? {
-                    if let Some(winners) = conflict_list.get(f.destination()) {
-                        if let Some(winner) = winners.last() {
-                            if *winner == self.name() {
-                                enlisted_files.push(InstallFile::new_raw(
-                                    self.manifest_dir().join(f.source()),
-                                    f.destination().to_owned(),
-                                ))
-                            }
-                        }
-                    } else {
-                        enlisted_files.push(InstallFile::new_raw(
-                            self.manifest_dir().join(f.source()),
-                            f.destination().to_owned(),
-                        ))
-                    }
-                }
-
-                Ok(enlisted_files)
-            }
+            Self::Data(_dir, m) | Self::Custom(_dir, m) => m.enlist_files(conflict_list),
             Self::Label(..) => Ok(vec![]),
         }
     }
@@ -384,16 +362,14 @@ impl TryFrom<Utf8PathBuf> for Mod {
             path.set_extension(MANIFEST_EXTENTION);
         }
 
-        if let Ok(file) = File::open(&path) {
-            if let Ok(manifest) = Manifest::try_from(file) {
-                return Ok(match manifest.mod_kind() {
-                    ModKind::FoMod | ModKind::Loader | ModKind::Data => {
-                        Mod::Data(path.parent().unwrap().to_path_buf(), manifest)
-                    }
-                    ModKind::Custom => Mod::Custom(path.parent().unwrap().to_path_buf(), manifest),
-                    ModKind::Label => Mod::Label(path.parent().unwrap().to_path_buf(), manifest),
-                });
-            }
+        if let Ok(manifest) = Manifest::try_from(path.as_path()) {
+            return Ok(match manifest.mod_kind() {
+                ModKind::FoMod | ModKind::Loader | ModKind::Data => {
+                    Mod::Data(path.parent().unwrap().to_path_buf(), manifest)
+                }
+                ModKind::Custom => Mod::Custom(path.parent().unwrap().to_path_buf(), manifest),
+                ModKind::Label => Mod::Label(path.parent().unwrap().to_path_buf(), manifest),
+            });
         }
 
         todo!()

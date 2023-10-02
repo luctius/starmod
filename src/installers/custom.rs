@@ -55,6 +55,7 @@ pub fn create_custom_manifest(
     let nexus_id = None;
 
     let mut m = Manifest::new(
+        cache_dir,
         name,
         name.to_string(),
         nexus_id,

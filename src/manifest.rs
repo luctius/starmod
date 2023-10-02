@@ -42,12 +42,6 @@ impl ManifestInternal {
             ModKind::Custom => Self::Custom(custom::CustomManifest {}),
         }
     }
-    pub fn enlist_files(
-        &self,
-        conflict_list: &HashMap<String, Vec<String>>,
-    ) -> Result<Vec<InstallFile>> {
-        todo!()
-    }
     pub fn files(&self, cache_dir: &Utf8Path, manifest_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
         match self {
             Self::Data(d) => d.files(cache_dir, manifest_dir),
@@ -55,42 +49,45 @@ impl ManifestInternal {
             Self::Custom(c) => c.files(cache_dir, manifest_dir),
         }
     }
-    pub fn dest_files(&self) -> Result<Vec<String>> {
-        todo!()
-        //     let mut dest_files = Vec::with_capacity(self.files.len());
-        //     for f in &self.files {
-        //         dest_files.push(f.destination().to_string());
-        //     }
-        //     dest_files
+    pub fn dest_files(&self, cache_dir: &Utf8Path, manifest_dir: &Utf8Path) -> Result<Vec<String>> {
+        let files = self.files(cache_dir, manifest_dir)?;
+        let mut dest_files = Vec::with_capacity(files.len());
+        for f in &files {
+            dest_files.push(f.destination().to_string());
+        }
+        Ok(dest_files)
     }
-    pub fn origin_files(&self) -> Result<Vec<Utf8PathBuf>> {
-        todo!()
-        //     let mut origin_files = Vec::with_capacity(self.files.len());
-        //     for f in &self.files {
-        //         let origin = f.source();
-        //         let origin = self.manifest_dir.to_path_buf().join(origin);
-        //         origin_files.push(origin)
-        //     }
-        //     origin_files
+    pub fn origin_files(
+        &self,
+        cache_dir: &Utf8Path,
+        manifest_dir: &Utf8Path,
+    ) -> Result<Vec<Utf8PathBuf>> {
+        let files = self.files(cache_dir, manifest_dir)?;
+        let mut origin_files = Vec::with_capacity(files.len());
+        for f in &files {
+            let origin = f.source();
+            let origin = manifest_dir.to_path_buf().join(origin);
+            origin_files.push(origin)
+        }
+        Ok(origin_files)
     }
     pub fn disabled_files(&self) -> Result<Vec<InstallFile>> {
-        todo!()
-        //     &self.disabled_files
+        match self {
+            Self::Data(d) => Ok(d.disabled_files()),
+
+            //TODO: does it make sense disabling files in these?
+            Self::Loader(_l) => Ok(vec![]),
+            Self::Custom(_c) => Ok(vec![]),
+        }
     }
     pub fn disable_file(&mut self, name: &str) -> Result<bool> {
-        todo!()
-        //     if let Some((idx, isf)) = self.files().iter().enumerate().find(|(_, isf)| {
-        //         if isf.source().to_string().eq(name) {
-        //             true
-        //         } else {
-        //             isf.source().file_name().unwrap_or_default().eq(name)
-        //         }
-        //     }) {
-        //         self.disabled_files.push(self.files.remove(idx));
-        //         Ok(true)
-        //     } else {
-        //         Ok(false)
-        //     }
+        match self {
+            Self::Data(d) => d.disable_file(name),
+
+            //TODO: does it make sense disabling files in these?
+            Self::Loader(_l) => Ok(false),
+            Self::Custom(_c) => Ok(false),
+        }
     }
 }
 
@@ -100,19 +97,20 @@ pub const MANIFEST_EXTENTION: &'static str = "ron";
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Manifest {
+    #[serde(skip_serializing, default)]
+    cache_dir: Utf8PathBuf,
     manifest_dir: Utf8PathBuf,
     name: String,
     version: Option<String>,
     nexus_id: Option<u32>,
     mod_state: ModState,
     mod_kind: ModKind,
-    // files: Vec<InstallFile>,
-    // disabled_files: Vec<InstallFile>,
     priority: isize,
     internal: ManifestInternal,
 }
 impl Manifest {
     pub fn new(
+        cache_dir: &Utf8Path,
         manifest_dir: &Utf8Path,
         name: String,
         nexus_id: Option<u32>,
@@ -122,6 +120,7 @@ impl Manifest {
         mod_kind: ModKind,
     ) -> Self {
         Self {
+            cache_dir: cache_dir.to_path_buf(),
             manifest_dir: manifest_dir.to_path_buf(),
             name,
             nexus_id,
@@ -140,8 +139,7 @@ impl Manifest {
             .join(archive)
             .with_extension(MANIFEST_EXTENTION);
 
-        let file = File::open(manifest_file)?;
-        Self::try_from(file)
+        Self::try_from(manifest_file.as_path())
     }
 
     pub fn write_manifest(&self, cache_dir: &Utf8Path) -> Result<()> {
@@ -203,33 +201,63 @@ impl Manifest {
         self.mod_kind
     }
     pub fn files(&self) -> Result<Vec<InstallFile>> {
-        todo!()
+        self.internal.files(&self.cache_dir, &self.manifest_dir)
+    }
+    pub fn enlist_files(
+        &self,
+        conflict_list: &HashMap<String, Vec<String>>,
+    ) -> Result<Vec<InstallFile>> {
+        let mut enlisted_files = Vec::new();
+
+        for f in &self.files()? {
+            if let Some(winners) = conflict_list.get(f.destination()) {
+                if let Some(winner) = winners.last() {
+                    if *winner == self.name() {
+                        enlisted_files.push(InstallFile::new_raw(
+                            self.manifest_dir().join(f.source()),
+                            f.destination().to_owned(),
+                        ))
+                    }
+                }
+            } else {
+                enlisted_files.push(InstallFile::new_raw(
+                    self.manifest_dir().join(f.source()),
+                    f.destination().to_owned(),
+                ))
+            }
+        }
+
+        Ok(enlisted_files)
     }
     pub fn dest_files(&self) -> Result<Vec<String>> {
-        todo!()
+        self.internal
+            .dest_files(&self.cache_dir, &self.manifest_dir)
     }
     pub fn origin_files(&self) -> Result<Vec<Utf8PathBuf>> {
-        todo!()
+        self.internal
+            .origin_files(&self.cache_dir, &self.manifest_dir)
     }
     pub fn disabled_files(&self) -> Result<Vec<InstallFile>> {
-        todo!()
+        self.internal.disabled_files()
     }
     pub fn disable_file(&mut self, name: &str) -> Result<bool> {
-        todo!()
+        self.internal.disable_file(name)
     }
     pub fn priority(&self) -> isize {
         self.priority
     }
 }
-impl TryFrom<File> for Manifest {
+impl<'a> TryFrom<&'a Utf8Path> for Manifest {
     type Error = Error;
 
-    fn try_from(file: File) -> std::result::Result<Self, Self::Error> {
+    fn try_from(file_path: &Utf8Path) -> std::result::Result<Self, Self::Error> {
+        let file = File::open(file_path)?;
         let mut buf_reader = BufReader::new(file);
         let mut contents = String::new();
         buf_reader.read_to_string(&mut contents)?;
 
-        let manifest: Manifest = ron::from_str(&contents)?;
+        let mut manifest: Manifest = ron::from_str(&contents)?;
+        manifest.cache_dir = file_path.parent().unwrap().to_path_buf();
 
         log::trace!("Opening manifest: {}", manifest.name());
         Ok(manifest)

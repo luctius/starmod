@@ -70,6 +70,7 @@ pub fn create_loader_manifest(
     }
 
     Ok(Manifest::new(
+        cache_dir,
         mod_dir,
         name,
         nexus_id,

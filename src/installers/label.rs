@@ -17,6 +17,7 @@ pub fn create_label_manifest(
     let nexus_id = None;
 
     Ok(Manifest::new(
+        cache_dir,
         name,
         name.to_string(),
         nexus_id,
