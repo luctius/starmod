@@ -19,7 +19,7 @@ use crate::{
         label::create_label_manifest,
         loader::create_loader_manifest,
     },
-    manifest::{InstallFile, Manifest, ModState, MANIFEST_EXTENTION},
+    manifest::{install_file::InstallFile, mod_state::ModState, Manifest, MANIFEST_EXTENTION},
 };
 
 const BACKUP_EXTENTION: &'static str = "starmod_bkp";
@@ -248,7 +248,7 @@ impl Mod {
     }
     pub fn origin_files(&self) -> Result<Vec<Utf8PathBuf>> {
         match self {
-            Self::Data(.., m) => Ok(m.origin_files()),
+            Self::Data(.., m) => m.origin_files(),
             Self::Custom(..) => Ok(self
                 .files()?
                 .iter()
@@ -259,7 +259,7 @@ impl Mod {
     }
     pub fn dest_files(&self) -> Result<Vec<String>> {
         match self {
-            Self::Data(.., m) => Ok(m.dest_files()),
+            Self::Data(.., m) => m.dest_files(),
             Self::Custom(..) => Ok(self
                 .files()?
                 .iter()
@@ -270,7 +270,7 @@ impl Mod {
     }
     pub fn files(&self) -> Result<Vec<InstallFile>> {
         match self {
-            Self::Data(.., m) => Ok(m.files().to_vec()),
+            Self::Data(.., m) => m.files(),
             Self::Custom(dir, m) => {
                 let mut files = Vec::new();
                 let walker = WalkDir::new(dir.join(m.manifest_dir()))
@@ -299,10 +299,10 @@ impl Mod {
             Self::Label(..) => Ok(vec![]),
         }
     }
-    pub fn disabled_files(&self) -> &[InstallFile] {
+    pub fn disabled_files(&self) -> Result<Vec<InstallFile>> {
         match self {
             Self::Data(.., m) => m.disabled_files(),
-            Self::Label(..) | Self::Custom(..) => &[],
+            Self::Label(..) | Self::Custom(..) => Ok(vec![]),
         }
     }
     pub fn disable_file(&mut self, name: &str) -> Result<bool> {

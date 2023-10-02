@@ -5,7 +5,7 @@ use walkdir::WalkDir;
 
 use crate::{
     // dmodman::{DmodMan, DMODMAN_EXTENTION},
-    manifest::{InstallFile, Manifest},
+    manifest::{install_file::InstallFile, Manifest},
     mods::ModKind,
 };
 

@@ -25,9 +25,7 @@ pub enum ModCmd {
         file_name: String,
     },
     /// Create a new label with 'name'
-    CreateLabel {
-        name: String,
-    },
+    CreateLabel { name: String },
     /// Create a custom mod 'name', optionally, instead of creating a directory, link to 'origin'
     CreateCustom {
         name: String,
@@ -35,16 +33,11 @@ pub enum ModCmd {
     },
     /// Disable mod 'name'
     #[clap(visible_aliases = &["dis", "d"])]
-    Disable {
-        name: String,
-    },
+    Disable { name: String },
     /// Disable all mods
     DisableAll,
     /// Disable 'file_name' from mod 'mod_name'
-    DisableFile {
-        mod_name: String,
-        file_name: String,
-    },
+    DisableFile { mod_name: String, file_name: String },
     /// Copy file from mod 'name' 'config_name' to mod 'custom_mod_name' and run 'EDITOR' or 'xdg-open' on the new file.
     EditConfig {
         name: String,
@@ -68,14 +61,10 @@ pub enum ModCmd {
     List,
     #[clap(visible_alias = "s")]
     /// Show the details of mod 'name'
-    Show {
-        name: String,
-    },
+    Show { name: String },
     /// Remove mod 'name' from installation.
     /// Does not remove the mod from the downloads directory.
-    Remove {
-        name: String,
-    },
+    Remove { name: String },
     /// Rename mod 'old_mod_name' to 'new_mod_name'
     #[clap(visible_aliases = &["ren", "r"])]
     Rename {
@@ -85,10 +74,7 @@ pub enum ModCmd {
     /// Set mod to new priority;
     /// Setting a priority below zero disables the mod.
     #[clap(visible_aliases = &["set-prio", "sp"])]
-    SetPriority {
-        name: String,
-        priority: isize,
-    },
+    SetPriority { name: String, priority: isize },
 }
 impl ModCmd {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
@@ -108,7 +94,10 @@ impl ModCmd {
                 mod_list.disable(settings.cache_dir(), settings.game_dir())?;
                 list_mods(settings.cache_dir())
             }
-            Self::DisableFile { mod_name, file_name} => {
+            Self::DisableFile {
+                mod_name,
+                file_name,
+            } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&mod_name) {
                     if !mod_list[idx].disable_file(&file_name)? {
@@ -328,6 +317,17 @@ fn show_mod_status(mod_list: &[Mod], idx: usize) -> Result<()> {
             Cell::new(isf.source().to_string()).fg(color),
             Cell::new(isf.destination().to_string()).fg(color),
         ]);
+    }
+
+    log::info!("{table}");
+
+    log::info!("");
+    let mut table = create_table(vec!["Disabled File"]);
+
+        let color = Color::Grey;
+    for isf in md.disabled_files()? {
+
+        table.add_row(vec![Cell::new(isf.source().to_string()).fg(color)]);
     }
 
     log::info!("{table}");

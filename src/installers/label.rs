@@ -1,12 +1,7 @@
 use anyhow::Result;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 
-use walkdir::WalkDir;
-
-use crate::{
-    manifest::{InstallFile, Manifest},
-    mods::ModKind,
-};
+use crate::{manifest::Manifest, mods::ModKind};
 
 pub fn create_label_manifest(
     mod_kind: ModKind,

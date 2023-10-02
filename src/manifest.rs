@@ -1,122 +1,100 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use std::{
     cmp::Ordering,
-    fmt::Display,
+    collections::HashMap,
     fs::{remove_dir_all, remove_file, File},
     io::{BufReader, Read, Write},
 };
 
-use anyhow::Result;
+use anyhow::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    dmodman::DMODMAN_EXTENTION,
-    installers::{DATA_DIR_NAME, TEXTURES_DIR_NAME},
-    mods::ModKind,
-};
+use crate::{dmodman::DMODMAN_EXTENTION, mods::ModKind};
+
+mod custom;
+mod data;
+mod loader;
+
+pub mod install_file;
+pub mod mod_state;
+
+use install_file::InstallFile;
+use mod_state::ModState;
+
+use self::{data::DataManifest, loader::LoaderManifest};
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+enum ManifestInternal {
+    Data(data::DataManifest),
+    Loader(loader::LoaderManifest),
+    Custom(custom::CustomManifest),
+}
+impl ManifestInternal {
+    pub fn new(
+        mod_kind: ModKind,
+        files: Vec<InstallFile>,
+        disabled_files: Vec<InstallFile>,
+    ) -> Self {
+        match mod_kind {
+            ModKind::FoMod | ModKind::Data => Self::Data(DataManifest::new(files, disabled_files)),
+            ModKind::Loader => Self::Loader(LoaderManifest::new(files)),
+            ModKind::Label => todo!(),
+            ModKind::Custom => Self::Custom(custom::CustomManifest {}),
+        }
+    }
+    pub fn enlist_files(
+        &self,
+        conflict_list: &HashMap<String, Vec<String>>,
+    ) -> Result<Vec<InstallFile>> {
+        todo!()
+    }
+    pub fn files(&self, cache_dir: &Utf8Path, manifest_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
+        match self {
+            Self::Data(d) => d.files(cache_dir, manifest_dir),
+            Self::Loader(l) => l.files(cache_dir, manifest_dir),
+            Self::Custom(c) => c.files(cache_dir, manifest_dir),
+        }
+    }
+    pub fn dest_files(&self) -> Result<Vec<String>> {
+        todo!()
+        //     let mut dest_files = Vec::with_capacity(self.files.len());
+        //     for f in &self.files {
+        //         dest_files.push(f.destination().to_string());
+        //     }
+        //     dest_files
+    }
+    pub fn origin_files(&self) -> Result<Vec<Utf8PathBuf>> {
+        todo!()
+        //     let mut origin_files = Vec::with_capacity(self.files.len());
+        //     for f in &self.files {
+        //         let origin = f.source();
+        //         let origin = self.manifest_dir.to_path_buf().join(origin);
+        //         origin_files.push(origin)
+        //     }
+        //     origin_files
+    }
+    pub fn disabled_files(&self) -> Result<Vec<InstallFile>> {
+        todo!()
+        //     &self.disabled_files
+    }
+    pub fn disable_file(&mut self, name: &str) -> Result<bool> {
+        todo!()
+        //     if let Some((idx, isf)) = self.files().iter().enumerate().find(|(_, isf)| {
+        //         if isf.source().to_string().eq(name) {
+        //             true
+        //         } else {
+        //             isf.source().file_name().unwrap_or_default().eq(name)
+        //         }
+        //     }) {
+        //         self.disabled_files.push(self.files.remove(idx));
+        //         Ok(true)
+        //     } else {
+        //         Ok(false)
+        //     }
+    }
+}
 
 pub const MANIFEST_EXTENTION: &'static str = "ron";
-
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub enum ModState {
-    Enabled,
-    Disabled,
-}
-impl ModState {
-    pub fn is_enabled(&self) -> bool {
-        match self {
-            Self::Enabled => true,
-            Self::Disabled => false,
-        }
-    }
-}
-impl From<bool> for ModState {
-    fn from(v: bool) -> Self {
-        match v {
-            true => Self::Enabled,
-            false => Self::Disabled,
-        }
-    }
-}
-impl Display for ModState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            ModState::Enabled => f.write_str("Enabled"),
-            ModState::Disabled => f.write_str("Disabled"),
-        }
-    }
-}
-
-#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
-pub struct InstallFile {
-    source: Utf8PathBuf,
-    destination: String,
-}
-impl InstallFile {
-    pub fn new(source: Utf8PathBuf, destination: String) -> Self {
-        let destination = format!(
-            "{}/{}",
-            DATA_DIR_NAME,
-            destination
-                .as_str()
-                .strip_prefix("data")
-                .unwrap_or(destination.as_str())
-                .to_lowercase()
-        )
-        .replace("//", "/")
-        .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME));
-
-        log::trace!("New InstallFile: {} -> {}", source, destination);
-
-        Self {
-            source,
-            destination,
-        }
-    }
-    pub fn new_raw(source: Utf8PathBuf, destination: String) -> Self {
-        log::trace!("New InstallFile: {} -> {}", source, destination);
-
-        Self {
-            source,
-            destination,
-        }
-    }
-    pub fn source(&self) -> &Utf8Path {
-        &self.source
-    }
-    pub fn destination(&self) -> &str {
-        &self.destination
-    }
-}
-impl From<Utf8PathBuf> for InstallFile {
-    fn from(pb: Utf8PathBuf) -> Self {
-        Self::from(pb.as_path())
-    }
-}
-impl From<&Utf8Path> for InstallFile {
-    fn from(p: &Utf8Path) -> Self {
-        let source = p.to_path_buf();
-        let destination = format!("{}/{}", DATA_DIR_NAME, p.strip_prefix("data").unwrap_or(p))
-            .replace("//", "/")
-            .replace("/textures/", &format!("/{}/", TEXTURES_DIR_NAME));
-
-        log::trace!("New InstallFile: {} -> {}", source, destination);
-        Self {
-            source,
-            destination,
-        }
-    }
-}
-impl Ord for InstallFile {
-    fn cmp(&self, other: &Self) -> Ordering {
-        self.source.cmp(&other.source)
-    }
-}
-impl PartialOrd for InstallFile {
-    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
-        Some(self.cmp(other))
-    }
-}
 
 //TODO more info about the mod, description, authors, version, etc
 
@@ -128,9 +106,10 @@ pub struct Manifest {
     nexus_id: Option<u32>,
     mod_state: ModState,
     mod_kind: ModKind,
-    files: Vec<InstallFile>,
-    disabled_files: Vec<InstallFile>,
+    // files: Vec<InstallFile>,
+    // disabled_files: Vec<InstallFile>,
     priority: isize,
+    internal: ManifestInternal,
 }
 impl Manifest {
     pub fn new(
@@ -142,18 +121,16 @@ impl Manifest {
         disabled_files: Vec<InstallFile>,
         mod_kind: ModKind,
     ) -> Self {
-        let s = Self {
+        Self {
             manifest_dir: manifest_dir.to_path_buf(),
             name,
             nexus_id,
             version,
-            files,
-            disabled_files,
             mod_state: ModState::Disabled,
             priority: 0,
             mod_kind,
-        };
-        s
+            internal: ManifestInternal::new(mod_kind, files, disabled_files),
+        }
     }
     pub fn set_priority(&mut self, priority: isize) {
         self.priority = priority;
@@ -225,71 +202,27 @@ impl Manifest {
     pub fn mod_kind(&self) -> ModKind {
         self.mod_kind
     }
-    pub fn files(&self) -> &[InstallFile] {
-        &self.files
+    pub fn files(&self) -> Result<Vec<InstallFile>> {
+        todo!()
     }
-    pub fn dest_files(&self) -> Vec<String> {
-        let mut dest_files = Vec::with_capacity(self.files.len());
-        for f in &self.files {
-            dest_files.push(f.destination.clone());
-        }
-        dest_files
+    pub fn dest_files(&self) -> Result<Vec<String>> {
+        todo!()
     }
-    pub fn origin_files(&self) -> Vec<Utf8PathBuf> {
-        let mut origin_files = Vec::with_capacity(self.files.len());
-        for f in &self.files {
-            let origin = f.source.as_path();
-            let origin = self.manifest_dir.to_path_buf().join(origin);
-            origin_files.push(origin)
-        }
-        origin_files
+    pub fn origin_files(&self) -> Result<Vec<Utf8PathBuf>> {
+        todo!()
     }
-    // pub fn enlist_files(&self, conflict_list: &HashMap<String, Vec<String>>) -> Vec<InstallFile> {
-    //     let mut enlisted_files = Vec::new();
-
-    //     for f in &self.files {
-    //         if let Some(winners) = conflict_list.get(&f.destination) {
-    //             if let Some(winner) = winners.last() {
-    //                 if *winner == self.name {
-    //                     enlisted_files.push(InstallFile {
-    //                         source: self.manifest_dir.to_path_buf().join(f.source.clone()),
-    //                         destination: f.destination.clone(),
-    //                     });
-    //                 }
-    //             }
-    //         } else {
-    //             enlisted_files.push(InstallFile {
-    //                 source: self.manifest_dir.to_path_buf().join(f.source.clone()),
-    //                 destination: f.destination.clone(),
-    //             });
-    //         }
-    //     }
-
-    //     enlisted_files
-    // }
-    pub fn disabled_files(&self) -> &[InstallFile] {
-        &self.disabled_files
+    pub fn disabled_files(&self) -> Result<Vec<InstallFile>> {
+        todo!()
     }
     pub fn disable_file(&mut self, name: &str) -> Result<bool> {
-        if let Some((idx, isf)) = self.files().iter().enumerate().find(|(_, isf)| {
-            if isf.source().to_string().eq(name) {
-                true
-            } else {
-                isf.source().file_name().unwrap_or_default().eq(name)
-            }
-        }) {
-            self.disabled_files.push(self.files.remove(idx));
-            Ok(true)
-        } else {
-            Ok(false)
-        }
+        todo!()
     }
     pub fn priority(&self) -> isize {
         self.priority
     }
 }
 impl TryFrom<File> for Manifest {
-    type Error = anyhow::Error;
+    type Error = Error;
 
     fn try_from(file: File) -> std::result::Result<Self, Self::Error> {
         let mut buf_reader = BufReader::new(file);

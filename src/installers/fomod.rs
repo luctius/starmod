@@ -16,7 +16,7 @@ use crate::{
         stdin::{Input, InputWithDone},
         InstallerError,
     },
-    manifest::{InstallFile, Manifest},
+    manifest::{install_file::InstallFile, Manifest},
     mods::ModKind,
 };
 
