@@ -88,6 +88,10 @@ pub struct AppLetArgs {
     /// Show information related to this build of starmod
     #[arg(short = 'V', long)]
     version: bool,
+
+    /// Show information related to this build of starmod
+    #[arg(long)]
+    long_version: bool,
 }
 
 fn log_stdout(
@@ -102,8 +106,18 @@ pub fn main() -> Result<()> {
     let applet = StarMod::parse();
     let (game, args) = applet.applet.unwrap();
 
-    if args.version {
-        print_build();
+    if args.long_version {
+        println!("version:{}", build::CLAP_LONG_VERSION);
+        return Ok(());
+    } else if args.version {
+        let tag = build::TAG;
+        let tag = if tag.is_empty() {
+            build::SHORT_COMMIT
+        } else {
+            tag
+        };
+
+        println!("{} ({})", build::PKG_VERSION, tag);
         return Ok(());
     }
 
@@ -147,23 +161,4 @@ pub fn main() -> Result<()> {
 
 fn print_completions<G: Generator>(gen: G, cmd: &mut Command) {
     generate(gen, cmd, cmd.get_name().to_string(), &mut std::io::stdout());
-}
-
-pub fn print_build() {
-    println!("version:{}", build::CLAP_LONG_VERSION);
-
-    println!("tag:{}", build::TAG);
-    println!("branch:{}", build::BRANCH);
-    println!("commit_id:{}", build::COMMIT_HASH);
-    println!("short_commit:{}", build::SHORT_COMMIT);
-    println!("commit_date_3339:{}", build::COMMIT_DATE_3339);
-
-    println!("build_os:{}", build::BUILD_OS);
-    println!("rust_version:{}", build::RUST_VERSION);
-    println!("rust_channel:{}", build::RUST_CHANNEL);
-    println!("cargo_version:{}", build::CARGO_VERSION);
-
-    println!("project_name:{}", build::PROJECT_NAME);
-    println!("build_time_3339:{}", build::BUILD_TIME_3339);
-    println!("build_rust_channel:{}", build::BUILD_RUST_CHANNEL);
 }
