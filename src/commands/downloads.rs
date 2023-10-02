@@ -31,6 +31,7 @@ pub enum DownloadError {
 #[derive(Debug, Clone, Parser, Default)]
 pub enum DownloadCmd {
     #[default]
+    #[clap(visible_aliases = &["lists", "l"])]
     List,
     Extract {
         name: String,

@@ -14,9 +14,16 @@ use crate::{
 
 #[derive(Debug, Clone, Parser, Default)]
 pub enum ListCmd {
+    /// Show all mods
     #[default]
+    #[clap(visible_alias = "m")]
     ModList,
+    /// Show all conflicting files in the current mod-list
+    #[clap(visible_alias = "c")]
     Conflicts,
+    /// Show all files currently in the mod-list;
+    /// Files shown in red are ignored and green files are used instead.
+    #[clap(visible_alias = "f")]
     Files,
 }
 impl ListCmd {

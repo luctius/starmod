@@ -270,6 +270,20 @@ impl Manifest {
     pub fn disabled_files(&self) -> &[InstallFile] {
         &self.disabled_files
     }
+    pub fn disable_file(&mut self, name: &str) -> Result<bool> {
+        if let Some((idx, isf)) = self.files().iter().enumerate().find(|(_, isf)| {
+            if isf.source().to_string().eq(name) {
+                true
+            } else {
+                isf.source().file_name().unwrap_or_default().eq(name)
+            }
+        }) {
+            self.disabled_files.push(self.files.remove(idx));
+            Ok(true)
+        } else {
+            Ok(false)
+        }
+    }
     pub fn priority(&self) -> isize {
         self.priority
     }

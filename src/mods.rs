@@ -305,6 +305,12 @@ impl Mod {
             Self::Label(..) | Self::Custom(..) => &[],
         }
     }
+    pub fn disable_file(&mut self, name: &str) -> Result<bool> {
+        match self {
+            Self::Data(.., m) => m.disable_file(name),
+            Self::Label(..) | Self::Custom(..) => Ok(false),
+        }
+    }
     pub fn remove(&self, cache_dir: &Utf8Path) -> Result<()> {
         match self {
             Self::Custom(.., m) | Self::Data(.., m) => m.remove(cache_dir),

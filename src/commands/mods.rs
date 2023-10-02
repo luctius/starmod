@@ -18,26 +18,34 @@ use super::list::list_mods;
 
 #[derive(Debug, Clone, Parser, Default)]
 pub enum ModCmd {
+    /// Copy 'file_name' from mod 'origin_mod' to mod 'custom_mod'
     CopyToCustom {
         origin_mod: String,
         custom_mod: String,
         file_name: String,
     },
+    /// Create a new label with 'name'
     CreateLabel {
         name: String,
     },
+    /// Create a custom mod 'name', optionally, instead of creating a directory, link to 'origin'
     CreateCustom {
         name: String,
         origin: Option<Utf8PathBuf>,
     },
+    /// Disable mod 'name'
+    #[clap(visible_aliases = &["dis", "d"])]
     Disable {
         name: String,
     },
+    /// Disable all mods
     DisableAll,
-    // DisableFile {
-    //     mod_name: String,
-    //     file_name: String,
-    // },
+    /// Disable 'file_name' from mod 'mod_name'
+    DisableFile {
+        mod_name: String,
+        file_name: String,
+    },
+    /// Copy file from mod 'name' 'config_name' to mod 'custom_mod_name' and run 'EDITOR' or 'xdg-open' on the new file.
     EditConfig {
         name: String,
         destination_mod_name: String,
@@ -46,28 +54,37 @@ pub enum ModCmd {
         #[arg(short, long)]
         extension: Option<String>,
     },
+    /// Enable mod 'name', optionally with priority 'priority'
+    #[clap(visible_aliases = &["en", "e"])]
     Enable {
         name: String,
         priority: Option<isize>,
     },
+    /// Enable all mods
     EnableAll,
     #[default]
+    #[clap(visible_aliases = &["lists","l"])]
+    /// Show all mods; Alias from 'mod list'
     List,
+    #[clap(visible_alias = "s")]
+    /// Show the details of mod 'name'
     Show {
         name: String,
     },
-    ReEnableAll,
+    /// Remove mod 'name' from installation.
+    /// Does not remove the mod from the downloads directory.
     Remove {
         name: String,
     },
+    /// Rename mod 'old_mod_name' to 'new_mod_name'
+    #[clap(visible_aliases = &["ren", "r"])]
     Rename {
         old_mod_name: String,
         new_mod_name: String,
     },
-    SetPrio {
-        name: String,
-        priority: isize,
-    },
+    /// Set mod to new priority;
+    /// Setting a priority below zero disables the mod.
+    #[clap(visible_aliases = &["set-prio", "sp"])]
     SetPriority {
         name: String,
         priority: isize,
@@ -82,7 +99,7 @@ impl ModCmd {
                     mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                     list_mods(settings.cache_dir())
                 } else {
-                    log::info!("Couldn't a mod by name '{name}'");
+                    log::info!("Couldn't find a mod by name '{name}'");
                     Ok(())
                 }
             }
@@ -90,6 +107,18 @@ impl ModCmd {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 mod_list.disable(settings.cache_dir(), settings.game_dir())?;
                 list_mods(settings.cache_dir())
+            }
+            Self::DisableFile { mod_name, file_name} => {
+                let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
+                if let Some(idx) = mod_list.find_mod(&mod_name) {
+                    if !mod_list[idx].disable_file(&file_name)? {
+                        log::info!("Couldn't find a file by name '{file_name}' in mod: {mod_name}");
+                    }
+                    Ok(())
+                } else {
+                    log::info!("Couldn't find a mod by name '{mod_name}'");
+                    Ok(())
+                }
             }
             Self::Enable { name, priority } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
@@ -100,7 +129,7 @@ impl ModCmd {
                     mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                     list_mods(settings.cache_dir())
                 } else {
-                    log::info!("Couldn't a mod by name '{name}'");
+                    log::info!("Couldn't find a mod by name '{name}'");
                     Ok(())
                 }
             }
@@ -152,13 +181,6 @@ impl ModCmd {
                 }
                 Ok(())
             }
-            Self::ReEnableAll {} => {
-                let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                mod_list.re_enable(settings.cache_dir(), settings.game_dir())?;
-                log::info!("Mods re-enabled.");
-                list_mods(settings.cache_dir())?;
-                Ok(())
-            }
             Self::Rename {
                 old_mod_name,
                 new_mod_name,
@@ -172,7 +194,7 @@ impl ModCmd {
                 }
                 Ok(())
             }
-            Self::SetPrio { name, priority } | Self::SetPriority { name, priority } => {
+            Self::SetPriority { name, priority } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&name) {
                     mod_list[idx].set_priority(priority)?;

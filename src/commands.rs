@@ -25,44 +25,43 @@ pub mod plugins;
 #[cfg(feature = "loadorder")]
 use self::plugins::PluginCmd;
 
+//TODO: we should probably add the most used commands here too
+// like set-priority etc
+
 #[derive(Debug, Clone, Parser)]
 pub enum Subcommands {
-    /// Config related commands
+    /// Config related commands; defaults to showing the current settings.
+    #[clap(visible_aliases = &["configs", "c"])]
     Config {
         #[command(subcommand)]
         cmd: Option<ConfigCmd>,
     },
-    /// Various lists
+    /// Various lists; defaults to showing the mod-list
+    #[clap(visible_aliases = &["lists", "l"])]
     List {
         #[command(subcommand)]
         cmd: Option<ListCmd>,
     },
-    /// Commands related to mods
-    Mod {
-        #[command(subcommand)]
-        cmd: Option<ModCmd>,
-    },
-    /// Alias for Mod
+    /// Commands related to mods; defaults to showing the mod-list
+    #[clap(visible_aliases = &["mod", "m"])]
     Mods {
         #[command(subcommand)]
         cmd: Option<ModCmd>,
     },
-    /// Commands related to download archives.
-    Download {
-        #[command(subcommand)]
-        cmd: Option<DownloadCmd>,
-    },
-    /// Alias for Download
+    /// Commands related to download archives; defaults to showing the downloaded files.
+    #[clap(visible_aliases = &["download", "down", "d"])]
     Downloads {
         #[command(subcommand)]
         cmd: Option<DownloadCmd>,
     },
-    /// Game related commands
+    /// Game related commands; defaults to running the game.
+    #[clap(visible_alias = "g")]
     Game {
         #[command(subcommand)]
         cmd: Option<GameCmd>,
     },
-    /// Alias for Game Run
+    /// Alias for Game Run; defaults to running the game.
+    #[clap(visible_alias = "r")]
     Run {
         #[command(subcommand)]
         cmd: Option<RunCmd>,
@@ -74,8 +73,6 @@ pub enum Subcommands {
     },
     /// Show explanation of the colours used by starmod
     Legenda,
-    /// Show information related to this build of starmod
-    Version,
 
     #[cfg(feature = "loadorder")]
     /// Plugin related commands
@@ -87,26 +84,18 @@ pub enum Subcommands {
 impl Subcommands {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
         //General TODO: Be more consistant in errors, error messages warnings etc.
-        //TODO: disable and re-enable all mods when mods are added, removed or changed order
-        // To avoid certain files not being properly added or removed.
 
         match self {
             Subcommands::Config { cmd } => ConfigCmd::execute(cmd.unwrap_or_default(), settings),
             Subcommands::List { cmd } => ListCmd::execute(cmd.unwrap_or_default(), settings),
-            Subcommands::Mod { cmd } | Subcommands::Mods { cmd } => {
-                ModCmd::execute(cmd.unwrap_or_default(), settings)
-            }
-            Subcommands::Download { cmd } | Subcommands::Downloads { cmd } => {
+            Subcommands::Mods { cmd } => ModCmd::execute(cmd.unwrap_or_default(), settings),
+            Subcommands::Downloads { cmd } => {
                 DownloadCmd::execute(cmd.unwrap_or_default(), settings)
             }
             Subcommands::Run { cmd } => RunCmd::execute(cmd.unwrap_or_default(), settings),
             Subcommands::Game { cmd } => GameCmd::execute(cmd.unwrap_or_default(), settings),
             Subcommands::Purge { cmd } => PurgeCmd::execute(cmd, settings),
             Subcommands::Legenda => show_legenda(),
-            Subcommands::Version => {
-                crate::print_build();
-                Ok(())
-            }
 
             #[cfg(feature = "loadorder")]
             Subcommands::Plugin { cmd } => PluginCmd::execute(cmd.unwrap_or_default(), settings),

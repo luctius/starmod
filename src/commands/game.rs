@@ -8,10 +8,12 @@ use crate::settings::{LootType, SettingErrors, Settings};
 
 #[derive(Clone, Debug, Parser)]
 pub enum GameCmd {
+    /// Run 'cmd'; defaults to running the game.
     Run {
         #[command(subcommand)]
         cmd: Option<RunCmd>,
     },
+    /// Edit game config files using $EDITOR or 'xdg-open'.
     EditConfig {
         #[arg(short, long)]
         config_name: Option<String>,
@@ -42,10 +44,15 @@ impl GameCmd {
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Parser, Default)]
 pub enum RunCmd {
+    /// Run the game
     #[default]
     Game,
+    /// Run the game's script extender
     Loader,
+    /// Run loot
     Loot,
+    /// Run the game's xedit
+    #[clap(id = "xedit")]
     XEdit,
 }
 impl RunCmd {

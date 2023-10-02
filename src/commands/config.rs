@@ -6,8 +6,12 @@ use crate::settings::{LootType, RunCmdKind, Settings};
 
 #[derive(Debug, Clone, Parser, Default)]
 pub enum ConfigCmd {
+    /// Show starmod's configuration values
     #[default]
+    #[clap(visible_alias = "s")]
     Show,
+    /// Update settings
+    #[clap(visible_alias = "u")]
     Update {
         #[arg(short = 'd', long)]
         download_dir: Option<Utf8PathBuf>,

@@ -73,17 +73,22 @@ impl AppLet {
 }
 
 #[derive(Parser, Debug, Clone)]
-#[command(author, version, about, long_about = None)]
+#[command(author, version, about, long_about = None, disable_version_flag(true))]
 pub struct AppLetArgs {
     /// Set output to verbose
     #[arg(short, long, value_enum, default_value_t = LogLevel::Info)]
     verbose: LogLevel,
 
+    /// Generate shell completion scripts for the given shell
     #[arg(long)]
     generator: Option<Shell>,
 
     #[command(subcommand)]
     command: Option<Subcommands>,
+
+    /// Show information related to this build of starmod
+    #[arg(short = 'V', long)]
+    version: bool,
 }
 
 fn log_stdout(
@@ -97,6 +102,11 @@ fn log_stdout(
 pub fn main() -> Result<()> {
     let applet = StarMod::parse();
     let (game, args) = applet.applet.unwrap();
+
+    if args.version {
+        print_build();
+        return Ok(());
+    }
 
     let mut settings = Settings::read_config(game, args.verbose)?;
 
