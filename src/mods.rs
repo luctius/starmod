@@ -1,11 +1,12 @@
 use std::{
     collections::{HashMap, HashSet},
     fmt::Display,
-    fs::{read_link, remove_dir, remove_file, rename, DirBuilder, File},
+    fs::{self, read_link, remove_dir, remove_file, rename, DirBuilder, File},
 };
 
 use anyhow::{Error, Result};
 use camino::{Utf8Path, Utf8PathBuf};
+use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
@@ -19,7 +20,6 @@ use crate::{
         loader::create_loader_manifest,
     },
     manifest::{InstallFile, Manifest, ModState, MANIFEST_EXTENTION},
-    modlist::gather_mods,
 };
 
 const BACKUP_EXTENTION: &'static str = "starmod_bkp";
@@ -145,8 +145,7 @@ pub enum Mod {
     // Virtual mod to better organise the list
     Label(Utf8PathBuf, Manifest),
 }
-//TODO let mods also contain the cache_dir
-//so they can write the manifest file on each chance.
+//TODO Rewrite
 impl Mod {
     pub fn kind(&self) -> ModKind {
         match self {
@@ -178,6 +177,9 @@ impl Mod {
                     return Ok(false);
                 } else {
                     m.set_priority(prio);
+                    if m.priority() < 0 {
+                        m.set_disabled();
+                    }
                 }
             }
         }
@@ -206,51 +208,6 @@ impl Mod {
             Self::Data(.., m) => m.nexus_id(),
             Self::Label(..) | Self::Custom(..) => None,
         }
-    }
-    pub fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
-        if self.is_enabled() {
-            return Ok(());
-        }
-        if self.priority() < 0 {
-            self.disable(cache_dir, game_dir)?;
-            return Ok(());
-        }
-
-        log::debug!("Enabling {}", self.name());
-
-        let mut mod_list = gather_mods(cache_dir)?;
-
-        let idx = mod_list
-            .iter()
-            .enumerate()
-            .find(|(_, m)| m.name() == self.name())
-            .map(|(idx, _)| idx)
-            .unwrap();
-
-        self.set_enabled()?;
-        mod_list[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
-        Ok(())
-    }
-    pub fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
-        if !self.is_enabled() {
-            return Ok(());
-        }
-
-        log::debug!("Disabling {}", self.name());
-
-        let mut mod_list = gather_mods(cache_dir)?;
-
-        let idx = mod_list
-            .iter()
-            .enumerate()
-            .find(|(_, m)| m.name() == self.name())
-            .map(|(idx, _)| idx)
-            .unwrap();
-
-        self.set_disabled()?;
-        mod_list[idx..=idx].as_mut().disable(cache_dir, game_dir)?;
-        mod_list[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
-        Ok(())
     }
 
     pub fn enlist_files(
@@ -437,10 +394,45 @@ impl TryFrom<Utf8PathBuf> for Mod {
     }
 }
 
+pub trait GatherModList {
+    fn gather_mods(cache_dir: &Utf8Path) -> Result<Vec<Mod>>;
+}
+
+impl GatherModList for Vec<Mod> {
+    fn gather_mods(cache_dir: &Utf8Path) -> Result<Vec<Mod>> {
+        let paths = fs::read_dir(cache_dir)?;
+
+        let mut mod_list = Vec::new();
+
+        for path in paths {
+            if let Ok(entry) = path {
+                if entry
+                    .path()
+                    .extension()
+                    .unwrap_or_default()
+                    .to_str()
+                    .unwrap_or_default()
+                    .eq(MANIFEST_EXTENTION)
+                {
+                    mod_list.push(Mod::try_from(Utf8PathBuf::try_from(
+                        entry.path().to_path_buf(),
+                    )?)?);
+                }
+            }
+        }
+
+        mod_list.sort_by(|a, b| a.cmp(b));
+
+        Ok(mod_list)
+    }
+}
+
 pub trait ModList {
     fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()>;
     fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()>;
     fn re_enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()>;
+    fn enable_mod(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path, idx: usize) -> Result<()>;
+    fn disable_mod(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path, idx: usize) -> Result<()>;
 }
 impl ModList for Vec<Mod> {
     fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
@@ -451,6 +443,12 @@ impl ModList for Vec<Mod> {
     }
     fn re_enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
         self.as_mut_slice().re_enable(cache_dir, game_dir)
+    }
+    fn enable_mod(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path, idx: usize) -> Result<()> {
+        self.as_mut_slice().enable_mod(cache_dir, game_dir, idx)
+    }
+    fn disable_mod(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path, idx: usize) -> Result<()> {
+        self.as_mut_slice().disable_mod(cache_dir, game_dir, idx)
     }
 }
 impl ModList for &mut [Mod] {
@@ -525,9 +523,7 @@ impl ModList for &mut [Mod] {
 
         log::debug!("Collecting File List");
         for m in self.iter() {
-            if m.is_enabled() {
-                file_list.extend(m.enlist_files(&conflict_list)?);
-            }
+            file_list.extend(m.enlist_files(&conflict_list)?);
         }
 
         log::trace!("file_list: {:?}", file_list);
@@ -615,5 +611,83 @@ impl ModList for &mut [Mod] {
         mod_cache.enable(cache_dir, game_dir)?;
 
         Ok(())
+    }
+    fn enable_mod(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path, idx: usize) -> Result<()> {
+        if let Some(md) = self.get(idx) {
+            if md.is_enabled() {
+                self.disable_mod(cache_dir, game_dir, idx)?;
+            }
+        } else {
+            todo!()
+        }
+        if let Some(md) = self.get_mut(idx) {
+            log::debug!("Enabling {}", md.name());
+            md.set_enabled()?;
+            self[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
+            Ok(())
+        } else {
+            todo!()
+        }
+    }
+    fn disable_mod(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path, idx: usize) -> Result<()> {
+        if let Some(md) = self.get_mut(idx) {
+            log::debug!("Disabling {}", md.name());
+
+            md.set_disabled()?;
+            self[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
+            Ok(())
+        } else {
+            todo!()
+        }
+    }
+}
+
+pub trait FindInModList {
+    fn find_mod(&self, mod_name: &str) -> Option<usize>;
+    fn find_mod_by_name(&self, name: &str) -> Option<usize>;
+    fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize>;
+}
+
+impl FindInModList for Vec<Mod> {
+    fn find_mod(&self, mod_name: &str) -> Option<usize> {
+        self.as_slice().find_mod(mod_name)
+    }
+    fn find_mod_by_name(&self, mod_name: &str) -> Option<usize> {
+        self.as_slice().find_mod_by_name(mod_name)
+    }
+    fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize> {
+        self.as_slice().find_mod_by_name_fuzzy(fuzzy_name)
+    }
+}
+impl FindInModList for &[Mod] {
+    fn find_mod(&self, mod_name: &str) -> Option<usize> {
+        if let Some(m) = self.find_mod_by_name(&mod_name) {
+            Some(m)
+        } else if let Ok(idx) = usize::from_str_radix(&mod_name, 10) {
+            self.get(idx).map(|_| idx)
+        } else if let Some(m) = self.find_mod_by_name_fuzzy(&mod_name) {
+            Some(m)
+        } else {
+            None
+        }
+    }
+
+    fn find_mod_by_name(&self, name: &str) -> Option<usize> {
+        self.iter()
+            .enumerate()
+            .find_map(|(idx, m)| (m.name() == name).then(|| idx))
+    }
+    fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize> {
+        let matcher = SkimMatcherV2::default();
+        let mut match_vec = Vec::new();
+
+        self.iter().enumerate().for_each(|(idx, m)| {
+            let i = matcher.fuzzy_match(m.name(), &fuzzy_name).unwrap_or(0);
+            match_vec.push((idx, i));
+        });
+
+        match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
+
+        match_vec.last().map(|(idx, _)| *idx)
     }
 }

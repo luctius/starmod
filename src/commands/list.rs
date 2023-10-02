@@ -7,7 +7,7 @@ use comfy_table::{Cell, Color};
 
 use crate::{
     conflict::{conflict_list_by_file, conflict_list_by_mod},
-    modlist::gather_mods,
+    mods::GatherModList,
     settings::{create_table, Settings},
     tag::Tag,
 };
@@ -30,7 +30,7 @@ impl ListCmd {
 }
 
 pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
+    let mod_list = Vec::gather_mods(cache_dir)?;
     let conflict_list = conflict_list_by_mod(&mod_list)?;
 
     //TODO: create seperate tables for each label we encounter.
@@ -102,7 +102,7 @@ pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
 }
 
 pub fn list_conflicts(cache_dir: &Utf8Path) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
+    let mod_list = Vec::gather_mods(cache_dir)?;
     let conflict_list_file = conflict_list_by_file(&mod_list)?;
     let mut files = Vec::new();
 
@@ -156,7 +156,7 @@ pub fn list_conflicts(cache_dir: &Utf8Path) -> Result<()> {
 }
 
 pub fn list_files(cache_dir: &Utf8Path) -> Result<()> {
-    let mod_list = gather_mods(cache_dir)?;
+    let mod_list = Vec::gather_mods(cache_dir)?;
     let conflict_list_file = conflict_list_by_file(&mod_list)?;
 
     let mut files = Vec::new();

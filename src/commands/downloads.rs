@@ -6,10 +6,9 @@ use std::{
 use crate::{
     decompress::SupportedArchives,
     dmodman::DMODMAN_EXTENTION,
-    enable::disable_mod,
+    // enable::disable_mod,
     manifest::Manifest,
-    modlist::{find_mod, gather_mods},
-    mods::ModKind,
+    mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::{create_table, Settings},
 };
 
@@ -44,33 +43,34 @@ pub enum DownloadCmd {
 impl DownloadCmd {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
         match self {
-            Self::List => list_downloaded_files(&settings.download_dir(), &settings.cache_dir()),
+            Self::List => list_downloaded_files(settings.download_dir(), settings.cache_dir()),
             Self::Extract { name } => {
                 find_and_extract_archive(
-                    &settings.download_dir(),
-                    &settings.cache_dir(),
+                    settings.download_dir(),
+                    settings.cache_dir(),
                     name.as_str(),
                 )?;
-                list_mods(&settings.cache_dir())
+                list_mods(settings.cache_dir())
             }
             Self::ExtractAll => {
-                extract_downloaded_files(&settings.download_dir(), &settings.cache_dir())?;
-                list_mods(&settings.cache_dir())
+                extract_downloaded_files(settings.download_dir(), settings.cache_dir())?;
+                list_mods(settings.cache_dir())
             }
             Self::ReInstall { name } => {
-                todo!()
-                // let mod_list = gather_mods(&settings.cache_dir())?;
-                // if let Some(mut m) = find_mod(&mod_list, &name) {
-                //     m.disable(&settings.cache_dir(), &settings.game_dir())?;
-                //     m.remove(&settings.cache_dir())?;
+                let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
+                if let Some(idx) = mod_list.find_mod(&name) {
+                    mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
+                    mod_list[idx].remove(settings.cache_dir())?;
 
-                //     let mod_type =
-                //         ModKind::detect_mod_type(&settings.cache_dir(), &m.manifest_dir())?;
-                //     mod_type.create_mod(&settings.cache_dir(), &m.manifest_dir())?;
-                // } else {
-                //     log::warn!("Mod '{name}' not found.")
-                // }
-                // Ok(())
+                    let mod_type = ModKind::detect_mod_type(
+                        settings.cache_dir(),
+                        &mod_list[idx].manifest_dir(),
+                    )?;
+                    mod_type.create_mod(settings.cache_dir(), &mod_list[idx].manifest_dir())?;
+                } else {
+                    log::warn!("Mod '{name}' not found.")
+                }
+                Ok(())
             }
         }
     }
@@ -238,8 +238,6 @@ fn rename_recursive(path: &Utf8Path) -> Result<()> {
 fn lower_case(path: &Utf8Path) -> Result<()> {
     let name = path.file_name().unwrap();
     let name = name.to_lowercase();
-    // let name = OsString::from(name);
-    // let name = name.as_os_str();
     let name = path.with_file_name(name);
 
     log::trace!("ren {} -> {}", path, name);

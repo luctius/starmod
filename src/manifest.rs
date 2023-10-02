@@ -1,7 +1,6 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use std::{
     cmp::Ordering,
-    collections::HashMap,
     fmt::Display,
     fs::{remove_dir_all, remove_file, File},
     io::{BufReader, Read, Write},
@@ -15,8 +14,6 @@ use crate::{
     installers::{DATA_DIR_NAME, TEXTURES_DIR_NAME},
     mods::ModKind,
 };
-
-//TODO: replace Utf8PathBuf with something that is ressilient to deserialisation of non-utf8 characters
 
 pub const MANIFEST_EXTENTION: &'static str = "ron";
 
@@ -276,26 +273,6 @@ impl Manifest {
     pub fn priority(&self) -> isize {
         self.priority
     }
-    // pub fn find_config_files(&self, ext: Option<&str>) -> Vec<Utf8PathBuf> {
-    //     let mut config_files = Vec::new();
-
-    //     let ext_vec = if let Some(ext) = ext {
-    //         vec![ext]
-    //     } else {
-    //         vec!["ini", "json", "yaml", "xml", "config", "toml"]
-    //     };
-
-    //     for f in self.origin_files() {
-    //         if let Some(file_ext) = f.extension() {
-    //             let file_ext = file_ext.to_string();
-
-    //             if ext_vec.contains(&file_ext.as_str()) {
-    //                 config_files.push(f);
-    //             }
-    //         }
-    //     }
-    //     config_files
-    // }
 }
 impl TryFrom<File> for Manifest {
     type Error = anyhow::Error;
@@ -318,7 +295,7 @@ impl PartialOrd for Manifest {
 }
 impl Ord for Manifest {
     fn cmp(&self, other: &Self) -> Ordering {
-        //Order around priority, or if equal around alfabethic order
+        //Order around priority or, if equal, around alfabethic order
         let o = self.priority().cmp(&other.priority());
         if o == Ordering::Equal {
             self.name().cmp(other.name())
