@@ -8,7 +8,9 @@ use crate::{
 
 #[derive(Debug, Clone, Parser)]
 pub enum PurgeCmd {
+    /// Remove both config and cache; This removes all of starmod's generated files.
     Config,
+    /// Remove cache directory, but keep the config files
     Cache,
 }
 impl PurgeCmd {
