@@ -31,7 +31,6 @@ mod decompress;
 use commands::Subcommands;
 mod conflict;
 mod dmodman;
-mod enable;
 mod game;
 mod installers;
 mod manifest;
