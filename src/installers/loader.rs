@@ -40,10 +40,10 @@ pub fn create_loader_manifest(
                     "dll" | "exe" => {
                         let file = entry_path.strip_prefix(&archive_dir)?.to_path_buf();
 
-                        files.push(dbg!(InstallFile::new_raw(
+                        files.push(InstallFile::new_raw(
                             file.clone(),
                             file.file_name().unwrap().to_string(),
-                        )));
+                        ));
                     }
                     _ => (),
                 }
