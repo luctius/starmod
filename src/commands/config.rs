@@ -2,7 +2,7 @@ use anyhow::Result;
 use camino::Utf8PathBuf;
 use clap::Parser;
 
-use crate::settings::{LootType, RunCmdKind, Settings};
+use crate::settings::{RunCmdKind, Settings};
 
 #[derive(Debug, Clone, Parser, Default)]
 pub enum ConfigCmd {

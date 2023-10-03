@@ -23,7 +23,7 @@ impl DataManifest {
         self.disabled_files.clone()
     }
     pub fn disable_file(&mut self, name: &str) -> Result<bool> {
-        if let Some((idx, isf)) = self.files.iter().enumerate().find(|(_, isf)| {
+        if let Some((idx, _isf)) = self.files.iter().enumerate().find(|(_, isf)| {
             if isf.source().to_string().eq(name) {
                 true
             } else {

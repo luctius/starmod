@@ -16,7 +16,9 @@ pub struct DmodMan {
     game: String,
     file_name: String,
     mod_id: u32,
+    #[allow(unused)]
     file_id: u64,
+    #[allow(unused)]
     update_status: UpdateStatus,
 }
 impl DmodMan {
@@ -53,6 +55,7 @@ impl DmodMan {
     pub fn mod_id(&self) -> u32 {
         self.mod_id
     }
+    #[allow(unused)]
     pub fn timestamp(&self) -> Option<String> {
         self.file_name
             .to_lowercase()
@@ -118,6 +121,7 @@ pub enum UpdateStatus {
 }
 
 impl UpdateStatus {
+    #[allow(unused)]
     pub fn time(&self) -> u64 {
         match self {
             Self::UpToDate(t)
@@ -132,6 +136,7 @@ impl UpdateStatus {
 pub struct DModManConfig {
     download_dir: Option<String>,
     profile: Option<String>,
+    #[allow(unused)]
     api_key: Option<String>,
 }
 impl DModManConfig {

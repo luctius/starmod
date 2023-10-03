@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs::{self, metadata, remove_dir_all, remove_file},
     sync::{atomic::AtomicBool, Arc, Mutex},
     thread,
@@ -9,7 +9,7 @@ use std::{
 use crate::{
     decompress::SupportedArchives,
     dmodman::{DmodMan, DMODMAN_EXTENSION},
-    manifest::{Manifest, MANIFEST_EXTENSION},
+    manifest::Manifest,
     mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::{create_table, Settings},
     utils::{rename_recursive, AddExtension},
@@ -20,7 +20,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use comfy_table::{Cell, Color};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
-use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use thiserror::Error;
 
 use super::list::list_mods;

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use camino::{Utf8Path, Utf8PathBuf};
+use camino::Utf8Path;
 use serde::{Deserialize, Serialize};
 
 use super::install_file::InstallFile;

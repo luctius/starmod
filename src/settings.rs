@@ -8,7 +8,6 @@ use std::{
     fmt::Display,
     fs::File,
     io::{BufReader, Read, Write},
-    ops::Deref,
 };
 use thiserror::Error;
 use xdg::BaseDirectories;
@@ -57,8 +56,13 @@ pub enum RunCmdKind {
     XEdit,
 }
 impl From<RunCmdKind> for RunCmd {
-    fn from(value: RunCmdKind) -> Self {
-        todo!()
+    fn from(kind: RunCmdKind) -> Self {
+        match kind {
+            RunCmdKind::Game => RunCmd::Game,
+            RunCmdKind::Loader => RunCmd::Loader,
+            RunCmdKind::Loot => RunCmd::Loot,
+            RunCmdKind::XEdit => RunCmd::XEdit,
+        }
     }
 }
 
@@ -210,6 +214,7 @@ impl Settings {
     pub fn cmd_name(&self) -> &str {
         self.game.mod_manager_name()
     }
+    #[allow(unused)]
     pub fn config_file(&self) -> &Utf8Path {
         &self.config_path
     }

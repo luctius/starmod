@@ -8,7 +8,7 @@ use comfy_table::{Cell, Color};
 use crate::{
     conflict::{conflict_list_by_file, conflict_list_by_mod},
     mods::GatherModList,
-    settings::{self, create_table, Settings},
+    settings::{create_table, Settings},
     tag::Tag,
 };
 

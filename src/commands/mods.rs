@@ -151,7 +151,7 @@ impl ModCmd {
                     ModKind::Custom.create_mod(settings.cache_dir(), &Utf8PathBuf::from(name))?;
                 Ok(())
             }
-            Self::CreateLabel { name } => {
+            Self::CreateLabel { name: _ } => {
                 todo!()
                 // let destination = settings.cache_dir().join(&name);
                 // log::info!("Creating label {}", &name);
@@ -371,7 +371,7 @@ fn edit_mod_config_files(
     }
 
     if !config_files_to_edit.is_empty() {
-        if let Some(destination_manifest) = mod_list.find_mod(&destination_mod_name) {
+        if let Some(_destination_manifest) = mod_list.find_mod(&destination_mod_name) {
             todo!();
             // for f in config_files_to_edit {
             //     f.strip_prefix(settings.cache_dir())
@@ -379,17 +379,17 @@ fn edit_mod_config_files(
             //         .strip_prefix(manifest)
             // }
 
-            log::info!("Editing: {:?}", config_files_to_edit);
+            // log::info!("Editing: {:?}", config_files_to_edit);
 
-            let mut editor_cmd = std::process::Command::new(settings.editor());
-            for f in config_files_to_edit {
-                let _ = editor_cmd.arg(f);
-            }
+            // let mut editor_cmd = std::process::Command::new(settings.editor());
+            // for f in config_files_to_edit {
+            //     let _ = editor_cmd.arg(f);
+            // }
 
-            let status = editor_cmd.spawn()?.wait()?;
-            if !status.success() {
-                log::info!("Editor failed with exit status: {}", status);
-            }
+            // let status = editor_cmd.spawn()?.wait()?;
+            // if !status.success() {
+            //     log::info!("Editor failed with exit status: {}", status);
+            // }
         }
     } else {
         log::info!("No relevant config files found.");

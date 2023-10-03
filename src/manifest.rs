@@ -10,7 +10,7 @@ use anyhow::{Error, Result};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    dmodman::{self, DmodMan, DMODMAN_EXTENSION},
+    dmodman::{DmodMan, DMODMAN_EXTENSION},
     mods::ModKind,
     utils::AddExtension,
 };
@@ -277,6 +277,7 @@ impl Manifest {
     pub fn is_enabled(&self) -> bool {
         self.mod_state().is_enabled()
     }
+    #[allow(unused)]
     pub fn is_disabled(&self) -> bool {
         !self.mod_state().is_enabled()
     }

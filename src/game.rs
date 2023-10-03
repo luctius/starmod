@@ -127,61 +127,61 @@ impl Game {
         // steam_dirs
         vec![]
     }
-    fn find_compat_dir(&self, steam_dirs: &[Utf8PathBuf]) -> Option<Utf8PathBuf> {
-        // for steam_dir in steam_dirs {
-        //     let walker = WalkDir::new(&steam_dir)
-        //         .min_depth(1)
-        //         .max_depth(usize::MAX)
-        //         .follow_links(false)
-        //         .same_file_system(false)
-        //         .contents_first(false);
+    // fn find_compat_dir(&self, steam_dirs: &[Utf8PathBuf]) -> Option<Utf8PathBuf> {
+    // for steam_dir in steam_dirs {
+    //     let walker = WalkDir::new(&steam_dir)
+    //         .min_depth(1)
+    //         .max_depth(usize::MAX)
+    //         .follow_links(false)
+    //         .same_file_system(false)
+    //         .contents_first(false);
 
-        //     if let Some(compat_dir) = walker
-        //         .into_iter()
-        //         .filter_entry(|entry| {
-        //             let compat_name = self.steam_id().to_string();
+    //     if let Some(compat_dir) = walker
+    //         .into_iter()
+    //         .filter_entry(|entry| {
+    //             let compat_name = self.steam_id().to_string();
 
-        //             entry
-        //                 .file_name()
-        //                 .to_str()
-        //                 .map(|s| s == compat_name.as_str())
-        //                 .unwrap_or(false)
-        //         })
-        //         .next()
-        //         .map(|de| de.map(|de| de.into_path()).unwrap_or_default())
-        //     {
-        //         return Some(compat_dir);
-        //     }
-        // }
-        None
-    }
-    fn find_proton_version(_steam_dirs: &[Utf8PathBuf]) -> Option<String> {
-        todo!()
-    }
-    fn find_proton(_steam_dirs: &[Utf8PathBuf]) -> Option<Utf8PathBuf> {
-        //     for steam_dir in steam_dirs {
-        //         let walker = WalkDir::new(steam_dir)
-        //             .min_depth(1)
-        //             .max_depth(usize::MAX)
-        //             .follow_links(false)
-        //             .same_file_system(false)
-        //             .contents_first(false);
+    //             entry
+    //                 .file_name()
+    //                 .to_str()
+    //                 .map(|s| s == compat_name.as_str())
+    //                 .unwrap_or(false)
+    //         })
+    //         .next()
+    //         .map(|de| de.map(|de| de.into_path()).unwrap_or_default())
+    //     {
+    //         return Some(compat_dir);
+    //     }
+    // }
+    // None
+    // }
+    // fn find_proton_version(_steam_dirs: &[Utf8PathBuf]) -> Option<String> {
+    // todo!()
+    // }
+    // fn find_proton(_steam_dirs: &[Utf8PathBuf]) -> Option<Utf8PathBuf> {
+    //     for steam_dir in steam_dirs {
+    //         let walker = WalkDir::new(steam_dir)
+    //             .min_depth(1)
+    //             .max_depth(usize::MAX)
+    //             .follow_links(false)
+    //             .same_file_system(false)
+    //             .contents_first(false);
 
-        //         if let (proton_dir)  walker
-        //             .into_iter()
-        //             .filter_entry(|entry| {
-        //                 let compat_name = Self::STEAM_ID.to_string();
+    //         if let (proton_dir)  walker
+    //             .into_iter()
+    //             .filter_entry(|entry| {
+    //                 let compat_name = Self::STEAM_ID.to_string();
 
-        //                 entry
-        //                     .file_name()
-        //                     .to_str()
-        //                     .map(|s| s.to_lowercase().as_str() == compat_name.as_str())
-        //                     .unwrap_or(false)
-        //             })
-        //             .next()
-        //             .map(|de| de.map(|de| de.into_path()).unwrap_or_default())
-        // }
+    //                 entry
+    //                     .file_name()
+    //                     .to_str()
+    //                     .map(|s| s.to_lowercase().as_str() == compat_name.as_str())
+    //                     .unwrap_or(false)
+    //             })
+    //             .next()
+    //             .map(|de| de.map(|de| de.into_path()).unwrap_or_default())
+    // }
 
-        todo!()
-    }
+    // todo!()
+    // }
 }

@@ -1,7 +1,6 @@
 use anyhow::Result;
 use camino::Utf8PathBuf;
 use clap::Parser;
-use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
 use crate::settings::{LootType, SettingErrors, Settings};

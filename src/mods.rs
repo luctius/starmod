@@ -8,7 +8,7 @@ use std::{
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
-use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 

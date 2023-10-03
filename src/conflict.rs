@@ -11,6 +11,7 @@ pub struct Conflicts {
     winning_over_mods: HashSet<String>,
 }
 impl Conflicts {
+    #[allow(unused)]
     pub fn conflict_files(&self) -> &[String] {
         &self.conflict_files
     }

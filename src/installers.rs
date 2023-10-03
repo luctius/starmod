@@ -13,6 +13,7 @@ pub const TEXTURES_DIR_NAME: &'static str = "Textures";
 
 #[derive(Error, Debug)]
 pub enum InstallerError {
+    #[allow(unused)]
     #[error("the mod {0} has unmet dependencies.")]
     DependenciesNotMet(String),
     #[error("the mod {0} has multiple data directories.")]
