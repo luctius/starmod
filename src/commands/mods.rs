@@ -203,7 +203,7 @@ impl ModCmd {
                 custom_mod,
                 file_name,
             } => {
-                let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
+                let mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(origin_idx) = mod_list.find_mod(&origin_mod) {
                     if let Some(custom_idx) = mod_list.find_mod(&custom_mod) {
                         //TODO check that custom_mod is indeed a custom mod
@@ -321,17 +321,22 @@ fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
         ]);
     }
 
+    table.add_row_if(|idx, _row| idx.eq(&0), vec![Cell::new("No files found.")]);
+
     log::info!("{table}");
 
     log::info!("");
-    let mut table = create_table(vec!["Disabled File"]);
 
-    let color = Color::Grey;
-    for isf in md.disabled_files()? {
-        table.add_row(vec![Cell::new(isf.source().to_string()).fg(color)]);
+    if !md.disabled_files()?.is_empty() {
+        let mut table = create_table(vec!["Disabled File"]);
+
+        let color = Color::Grey;
+        for isf in md.disabled_files()? {
+            table.add_row(vec![Cell::new(isf.source().to_string()).fg(color)]);
+        }
+
+        log::info!("{table}");
     }
-
-    log::info!("{table}");
 
     Ok(())
 }

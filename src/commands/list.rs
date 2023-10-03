@@ -8,7 +8,7 @@ use comfy_table::{Cell, Color};
 use crate::{
     conflict::{conflict_list_by_file, conflict_list_by_mod},
     mods::GatherModList,
-    settings::{create_table, Settings},
+    settings::{self, create_table, Settings},
     tag::Tag,
 };
 
@@ -18,13 +18,14 @@ pub enum ListCmd {
     #[default]
     #[clap(visible_alias = "m")]
     ModList,
-    /// Show all conflicting files in the current mod-list
+    /// Show all conflicting files in the current active mod-list
     #[clap(visible_alias = "c")]
     Conflicts,
-    /// Show all files currently in the mod-list;
+    /// Show all files currently in the active mod-list;
     /// Files shown in red are ignored and green files are used instead.
     #[clap(visible_alias = "f")]
     Files,
+    DisabledFiles,
 }
 impl ListCmd {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
@@ -32,6 +33,7 @@ impl ListCmd {
             Self::ModList => list_mods(&settings.cache_dir()),
             Self::Conflicts => list_conflicts(&settings.cache_dir()),
             Self::Files => list_files(&settings.cache_dir()),
+            Self::DisabledFiles => list_disabled_files(&settings.cache_dir()),
         }
     }
 }
@@ -164,6 +166,11 @@ pub fn list_conflicts(cache_dir: &Utf8Path) -> Result<()> {
         ]);
     }
 
+    table.add_row_if(
+        |idx, _row| idx.eq(&0),
+        vec![Cell::new("No conflicting files found.")],
+    );
+
     log::info!("{table}");
     Ok(())
 }
@@ -217,6 +224,33 @@ pub fn list_files(cache_dir: &Utf8Path) -> Result<()> {
             Cell::new(name).fg(color),
         ]);
     }
+
+    table.add_row_if(|idx, _row| idx.eq(&0), vec![Cell::new("No files found.")]);
+
+    log::info!("{table}");
+
+    Ok(())
+}
+
+pub fn list_disabled_files(cache_dir: &Utf8Path) -> Result<()> {
+    let mod_list = Vec::gather_mods(cache_dir)?;
+    let mut disabled_files = Vec::new();
+
+    for m in mod_list {
+        for f in m.disabled_files()? {
+            disabled_files.push((f, m.name().to_string()));
+        }
+    }
+
+    let mut table = create_table(vec!["File", "Mod"]);
+    for (f, mod_name) in disabled_files {
+        table.add_row(vec![f.destination().to_string(), mod_name]);
+    }
+
+    table.add_row_if(
+        |idx, _row| idx.eq(&0),
+        vec![Cell::new("No disabled files found.")],
+    );
 
     log::info!("{table}");
 
