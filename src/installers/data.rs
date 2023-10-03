@@ -6,9 +6,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 use walkdir::WalkDir;
 
 use crate::{
-    dmodman::{DmodMan, DMODMAN_EXTENTION},
+    dmodman::{DmodMan, DMODMAN_EXTENSION},
     manifest::{install_file::InstallFile, Manifest},
     mods::ModKind,
+    utils::AddExtension,
 };
 
 use super::InstallerError;
@@ -72,7 +73,7 @@ pub fn create_data_manifest(
     let mut disabled_files = Vec::new();
 
     let archive_dir = cache_dir.join(name);
-    let dmodman = archive_dir.with_extension(DMODMAN_EXTENTION);
+    let dmodman = archive_dir.add_extension(DMODMAN_EXTENSION);
 
     let walker = WalkDir::new(&archive_dir.join(&data_path))
         .min_depth(1)

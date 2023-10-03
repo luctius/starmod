@@ -10,7 +10,8 @@ use comfy_table::{Cell, Color};
 
 use crate::{
     conflict::conflict_list_by_file,
-    mods::{FindInModList, GatherModList, Mod, ModKind, ModList},
+    manifest::Manifest,
+    mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::{create_table, Settings},
 };
 
@@ -151,18 +152,19 @@ impl ModCmd {
                 Ok(())
             }
             Self::CreateLabel { name } => {
-                let destination = settings.cache_dir().join(&name);
-                log::info!("Creating label {}", &name);
-                DirBuilder::new().recursive(true).create(destination)?;
-                let _ =
-                    ModKind::Label.create_mod(settings.cache_dir(), &Utf8PathBuf::from(name))?;
-                Ok(())
+                todo!()
+                // let destination = settings.cache_dir().join(&name);
+                // log::info!("Creating label {}", &name);
+                // DirBuilder::new().recursive(true).create(destination)?;
+                // let _ =
+                //     ModKind::Label.create_mod(settings.cache_dir(), &Utf8PathBuf::from(name))?;
+                // Ok(())
             }
             Self::Remove { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&name) {
                     mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
-                    mod_list[idx].remove(settings.cache_dir())?;
+                    mod_list[idx].remove()?;
                     log::info!("Removed mod '{}'", mod_list[idx].name());
                     list_mods(settings.cache_dir())?;
                 } else {
@@ -254,7 +256,7 @@ fn show_mod(cache_dir: &Utf8Path, mod_name: &str) -> Result<()> {
     Ok(())
 }
 
-fn show_mod_status(mod_list: &[Mod], idx: usize) -> Result<()> {
+fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
     let conflict_list_file = conflict_list_by_file(&mod_list)?;
     let md = &mod_list[idx];
 
@@ -324,9 +326,8 @@ fn show_mod_status(mod_list: &[Mod], idx: usize) -> Result<()> {
     log::info!("");
     let mut table = create_table(vec!["Disabled File"]);
 
-        let color = Color::Grey;
+    let color = Color::Grey;
     for isf in md.disabled_files()? {
-
         table.add_row(vec![Cell::new(isf.source().to_string()).fg(color)]);
     }
 

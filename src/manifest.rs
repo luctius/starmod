@@ -9,7 +9,11 @@ use std::{
 use anyhow::{Error, Result};
 use serde::{Deserialize, Serialize};
 
-use crate::{dmodman::DMODMAN_EXTENTION, mods::ModKind};
+use crate::{
+    dmodman::{self, DmodMan, DMODMAN_EXTENSION},
+    mods::ModKind,
+    utils::AddExtension,
+};
 
 mod custom;
 mod data;
@@ -38,7 +42,6 @@ impl ManifestInternal {
         match mod_kind {
             ModKind::FoMod | ModKind::Data => Self::Data(DataManifest::new(files, disabled_files)),
             ModKind::Loader => Self::Loader(LoaderManifest::new(files)),
-            ModKind::Label => todo!(),
             ModKind::Custom => Self::Custom(custom::CustomManifest {}),
         }
     }
@@ -91,7 +94,7 @@ impl ManifestInternal {
     }
 }
 
-pub const MANIFEST_EXTENTION: &'static str = "ron";
+pub const MANIFEST_EXTENSION: &'static str = "ron";
 
 //TODO more info about the mod, description, authors, version, etc
 
@@ -100,6 +103,7 @@ pub struct Manifest {
     #[serde(skip_serializing, default)]
     cache_dir: Utf8PathBuf,
     manifest_dir: Utf8PathBuf,
+    original_name: String,
     name: String,
     version: Option<String>,
     nexus_id: Option<u32>,
@@ -122,6 +126,7 @@ impl Manifest {
         Self {
             cache_dir: cache_dir.to_path_buf(),
             manifest_dir: manifest_dir.to_path_buf(),
+            original_name: name.clone(),
             name,
             nexus_id,
             version,
@@ -131,27 +136,26 @@ impl Manifest {
             internal: ManifestInternal::new(mod_kind, files, disabled_files),
         }
     }
-    pub fn set_priority(&mut self, priority: isize) {
+    pub fn set_priority(&mut self, priority: isize) -> Result<()> {
         self.priority = priority;
+        self.write()
     }
     pub fn from_file(cache_dir: &Utf8Path, archive: &Utf8Path) -> Result<Self> {
         let manifest_file = Utf8PathBuf::from(cache_dir)
             .join(archive)
-            .with_extension(MANIFEST_EXTENTION);
+            .add_extension(MANIFEST_EXTENSION);
 
         Self::try_from(manifest_file.as_path())
     }
 
-    pub fn write_manifest(&self, cache_dir: &Utf8Path) -> Result<()> {
-        let path = Utf8PathBuf::from(cache_dir)
-            .join(self.manifest_dir.file_stem().unwrap())
-            .with_extension(MANIFEST_EXTENTION);
+    pub fn write(&self) -> Result<()> {
+        let path = Utf8PathBuf::from(self.cache_dir.as_path())
+            .join(self.manifest_dir.as_path())
+            .add_extension(MANIFEST_EXTENSION);
 
-        // if path.exists() {
-        //     log::trace!("Removing manifest file '{}' before update.", path.display());
-        //     remove_file(&path)?;
-        // }
-
+        if !path.exists() {
+            log::trace!("Creating Manifest at '{}'", path);
+        }
         let mut file = File::create(&path)?;
 
         let serialized =
@@ -160,13 +164,13 @@ impl Manifest {
         file.write_all(serialized.as_bytes())?;
         Ok(())
     }
-    pub fn remove(&self, cache_dir: &Utf8Path) -> Result<()> {
-        let mut path = Utf8PathBuf::from(cache_dir).join(&self.manifest_dir);
+    pub fn remove(&self) -> Result<()> {
+        let path = self.cache_dir.join(&self.manifest_dir);
         remove_dir_all(&path)?;
-        path.set_extension(MANIFEST_EXTENTION);
-        remove_file(&path)?;
-        path.set_extension(DMODMAN_EXTENTION);
-        remove_file(&path)?;
+        let manifest_file = path.add_extension(MANIFEST_EXTENSION);
+        remove_file(&manifest_file)?;
+        let dmodman_file = manifest_file.with_extension(DMODMAN_EXTENSION);
+        remove_file(dmodman_file)?;
         Ok(())
     }
     pub fn is_valid(&self) -> bool {
@@ -176,17 +180,23 @@ impl Manifest {
     pub fn manifest_dir(&self) -> &Utf8Path {
         &self.manifest_dir
     }
+    pub fn original_name(&self) -> &str {
+        &self.original_name
+    }
     pub fn name(&self) -> &str {
         &self.name
     }
-    pub fn set_name(&mut self, name: String) {
-        self.name = name
+    pub fn set_name(&mut self, name: String) -> Result<()> {
+        self.name = name;
+        self.write()
     }
-    pub fn set_enabled(&mut self) {
+    pub fn set_enabled(&mut self) -> Result<()> {
         self.mod_state = ModState::Enabled;
+        self.write()
     }
-    pub fn set_disabled(&mut self) {
+    pub fn set_disabled(&mut self) -> Result<()> {
         self.mod_state = ModState::Disabled;
+        self.write()
     }
     pub fn nexus_id(&self) -> Option<u32> {
         self.nexus_id
@@ -196,9 +206,6 @@ impl Manifest {
     }
     pub fn mod_state(&self) -> ModState {
         self.mod_state
-    }
-    pub fn mod_kind(&self) -> ModKind {
-        self.mod_kind
     }
     pub fn files(&self) -> Result<Vec<InstallFile>> {
         self.internal.files(&self.cache_dir, &self.manifest_dir)
@@ -245,6 +252,40 @@ impl Manifest {
     }
     pub fn priority(&self) -> isize {
         self.priority
+    }
+    pub fn find_config_files(&self, extension: Option<&str>) -> Result<Vec<Utf8PathBuf>> {
+        let mut config_files = Vec::new();
+
+        let ext_vec = if let Some(ext) = extension {
+            vec![ext]
+        } else {
+            vec!["ini", "json", "yaml", "xml", "config", "toml"]
+        };
+
+        for f in self.origin_files()? {
+            if let Some(file_ext) = f.extension() {
+                let file_ext = file_ext.to_string();
+
+                if ext_vec.contains(&file_ext.as_str()) {
+                    config_files.push(f);
+                }
+            }
+        }
+        Ok(config_files)
+    }
+    pub fn is_enabled(&self) -> bool {
+        self.mod_state().is_enabled()
+    }
+    pub fn is_disabled(&self) -> bool {
+        !self.mod_state().is_enabled()
+    }
+    pub fn kind(&self) -> ModKind {
+        self.mod_kind
+    }
+    pub fn is_an_update(&self, dmodman: &DmodMan) -> bool {
+        dmodman.name() == self.original_name
+            && dmodman.mod_id() == self.nexus_id.unwrap_or_default()
+            && dmodman.version().unwrap_or_default() > self.version.clone().unwrap_or_default()
     }
 }
 impl<'a> TryFrom<&'a Utf8Path> for Manifest {

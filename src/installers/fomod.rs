@@ -11,13 +11,14 @@ use std::{collections::HashSet, fs::File, io::Read};
 use walkdir::WalkDir;
 
 use crate::{
-    dmodman::{DmodMan, DMODMAN_EXTENTION},
+    dmodman::{DmodMan, DMODMAN_EXTENSION},
     installers::{
         stdin::{Input, InputWithDone},
         InstallerError,
     },
     manifest::{install_file::InstallFile, Manifest},
     mods::ModKind,
+    utils::AddExtension,
 };
 
 pub fn create_fomod_manifest(
@@ -32,7 +33,7 @@ pub fn create_fomod_manifest(
     let mut config = archive_dir.clone();
     config.push(FOMOD_MODCONFIG_FILE);
 
-    let dmodman = archive_dir.with_extension(DMODMAN_EXTENTION);
+    let dmodman = archive_dir.add_extension(DMODMAN_EXTENSION);
 
     let info = {
         let mut info = archive_dir.clone();

@@ -24,6 +24,8 @@ use clap::{Command, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
 use flexi_logger::{detailed_format, Cleanup, Criterion, FileSpec, Logger, Naming, WriteMode};
 use game::Game;
+use indicatif::MultiProgress;
+use indicatif_log_bridge::LogWrapper;
 use shadow_rs::shadow;
 
 mod commands;
@@ -38,6 +40,7 @@ mod modlist;
 mod mods;
 mod settings;
 mod tag;
+mod utils;
 
 use settings::{LogLevel, Settings};
 
@@ -123,7 +126,7 @@ pub fn main() -> Result<()> {
 
     let mut settings = Settings::read_config(game, args.verbose)?;
 
-    let _logger = Logger::try_with_env_or_str("trace")?
+    let logger = Logger::try_with_env_or_str("trace")?
         .log_to_file(FileSpec::try_from(settings.log_file())?)
         .write_mode(WriteMode::BufferDontFlush)
         .append()
@@ -137,6 +140,9 @@ pub fn main() -> Result<()> {
         .format_for_files(detailed_format)
         .write_mode(WriteMode::Direct)
         .start()?;
+
+    // let multi = MultiProgress::new();
+    // LogWrapper::new(multi.clone(), logger).try_init().unwrap();
 
     if let Some(generator) = args.generator {
         let mut cmd = AppLetArgs::command();

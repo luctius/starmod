@@ -65,6 +65,6 @@ pub fn create_custom_manifest(
         mod_kind,
     );
 
-    m.set_priority(1000);
+    m.set_priority(1000)?;
     Ok(m)
 }

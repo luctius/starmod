@@ -103,6 +103,11 @@ pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
         ]);
     }
 
+    table.add_row_if(
+        |idx, _row| idx.eq(&0),
+        vec![Cell::new("No mods are installed.")],
+    );
+
     log::info!("{table}");
 
     Ok(())

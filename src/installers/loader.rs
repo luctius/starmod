@@ -4,9 +4,10 @@ use camino::{Utf8Path, Utf8PathBuf};
 use walkdir::WalkDir;
 
 use crate::{
-    dmodman::{DmodMan, DMODMAN_EXTENTION},
+    dmodman::{DmodMan, DMODMAN_EXTENSION},
     manifest::{install_file::InstallFile, Manifest},
     mods::ModKind,
+    utils::AddExtension,
 };
 
 pub fn create_loader_manifest(
@@ -20,7 +21,7 @@ pub fn create_loader_manifest(
     let mut archive_dir = Utf8PathBuf::from(cache_dir);
     archive_dir.push(mod_dir);
 
-    let dmodman = archive_dir.with_extension(DMODMAN_EXTENTION);
+    let dmodman = archive_dir.add_extension(DMODMAN_EXTENSION);
 
     let walker = WalkDir::new(&archive_dir)
         .min_depth(1)

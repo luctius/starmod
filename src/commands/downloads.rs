@@ -1,15 +1,15 @@
 use std::{
-    ffi::OsString,
+    collections::{HashMap, HashSet},
     fs::{self, metadata, remove_dir_all, remove_file},
 };
 
 use crate::{
     decompress::SupportedArchives,
-    dmodman::DMODMAN_EXTENTION,
-    // enable::disable_mod,
-    manifest::Manifest,
+    dmodman::{DmodMan, DMODMAN_EXTENSION},
+    manifest::{Manifest, MANIFEST_EXTENSION},
     mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::{create_table, Settings},
+    utils::{rename_recursive, AddExtension},
 };
 
 use anyhow::Result;
@@ -18,7 +18,6 @@ use clap::Parser;
 use comfy_table::{Cell, Color};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use thiserror::Error;
-use walkdir::WalkDir;
 
 use super::list::list_mods;
 
@@ -30,16 +29,18 @@ pub enum DownloadError {
 
 #[derive(Debug, Clone, Parser, Default)]
 pub enum DownloadCmd {
+    /// List all archives in the download directory
     #[default]
     #[clap(visible_aliases = &["lists", "l"])]
     List,
-    Extract {
-        name: String,
-    },
+    /// Extract given archive
+    Extract { name: String },
+    /// Extract all archives which are not in the cache directory.
     ExtractAll,
-    ReInstall {
-        name: String,
-    },
+    /// Re-install given archive
+    ReInstall { name: String },
+    /// Update all mods which have an archive in the archive directory with a newer version.
+    UpdateAll,
 }
 impl DownloadCmd {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
@@ -61,7 +62,7 @@ impl DownloadCmd {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&name) {
                     mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
-                    mod_list[idx].remove(settings.cache_dir())?;
+                    mod_list[idx].remove()?;
 
                     let mod_type = ModKind::detect_mod_type(
                         settings.cache_dir(),
@@ -73,28 +74,74 @@ impl DownloadCmd {
                 }
                 Ok(())
             }
+            Self::UpdateAll => {
+                let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
+                let dmodman_list = HashMap::<_, _>::from_iter(
+                    dmodman_list
+                        .iter()
+                        .map(|dm| ((dm.name(), dm.mod_id()), dm.version().unwrap_or_default())),
+                );
+                let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
+                mod_list.retain(|md| {
+                    dmodman_list
+                        .get(&(
+                            md.original_name().to_string(),
+                            md.nexus_id().unwrap_or_default(),
+                        ))
+                        .map(|v| *v > md.version().unwrap_or_default().to_owned())
+                        .unwrap_or(false)
+                });
+
+                for md in mod_list {
+                    let name = md.name().to_owned();
+                    log::info!("Updating '{name}'")
+                    // md.remove()?;
+                    // find_and_extract_archive(
+                    //     settings.download_dir(),
+                    //     settings.cache_dir(),
+                    //     name.as_str(),
+                    // )?;
+                }
+
+                Ok(())
+            }
         }
     }
 }
 
 pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
-    let sf = downloaded_files(download_dir);
+    let sf = downloaded_files(download_dir)?;
+    let mod_list = Vec::gather_mods(cache_dir)?;
+    let mod_list =
+        HashMap::<_, _>::from_iter(mod_list.iter().map(|m| (m.manifest_dir().to_string(), m)));
 
     let mut table = create_table(vec!["Archive", "Status"]);
 
     for (_, f) in sf {
-        let mut archive = Utf8PathBuf::from(cache_dir);
-        let file = f.to_string_lossy().to_string().to_lowercase();
-        archive.push(file.clone());
-        archive.set_extension("ron");
+        let dmodman = DmodMan::try_from(download_dir.join(&f).add_extension("json"));
+        let archive = f.with_extension("").as_str().to_lowercase();
+        let manifest = mod_list.get(&archive);
+
+        log::trace!("testing {} against {}.", f.as_str(), archive);
+
+        let (state, color) = match (
+            // is installed
+            manifest.is_some(),
+            // is an upgrade
+            dmodman
+                .ok()
+                .map(|dmod| manifest.map(|m| m.is_an_update(&dmod)))
+                .flatten()
+                .unwrap_or(false),
+        ) {
+            (true, false) => ("Installed", Color::Grey),
+            (true, true) => ("Upgrade", Color::Yellow),
+            (false, _) => ("New", Color::Green),
+        };
 
         table.add_row(vec![
-            Cell::new(f.to_string_lossy()).fg(Color::White),
-            Cell::new(match archive.exists() && archive.is_file() {
-                true => "Installed".to_string(),
-                false => "New".to_string(),
-            })
-            .fg(Color::White),
+            Cell::new(f).fg(Color::White),
+            Cell::new(state).fg(color),
         ]);
     }
 
@@ -102,26 +149,35 @@ pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> R
     Ok(())
 }
 
-pub fn downloaded_files(download_dir: &Utf8Path) -> Vec<(SupportedArchives, OsString)> {
+pub fn downloaded_files(download_dir: &Utf8Path) -> Result<Vec<(SupportedArchives, Utf8PathBuf)>> {
     let mut supported_files = Vec::new();
     let paths = fs::read_dir(download_dir).unwrap();
 
     for path in paths {
         if let Ok(path) = path {
             if let Ok(typ) = SupportedArchives::from_path(&path.path()) {
-                supported_files.push((typ, path.file_name()));
+                let path = Utf8PathBuf::try_from(path.file_name().to_str().unwrap_or_default())?;
+                supported_files.push((typ, path));
             }
         }
     }
 
-    supported_files
+    Ok(supported_files)
 }
 
 pub fn extract_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
-    let sf = downloaded_files(download_dir);
-    for (typ, f) in sf {
-        extract_downloaded_file(download_dir, cache_dir, typ, f)?;
+    let sf = downloaded_files(download_dir)?;
+    let mut extracted_files = Vec::with_capacity(sf.len());
+    for (typ, f) in &sf {
+        if extract_downloaded_file(download_dir, cache_dir, *typ, f)? {
+            extracted_files.push(f);
+        }
     }
+
+    for name in extracted_files {
+        install_downloaded_file(&cache_dir, &name)?;
+    }
+
     Ok(())
 }
 
@@ -130,11 +186,17 @@ pub fn find_and_extract_archive(
     cache_dir: &Utf8Path,
     name: &str,
 ) -> Result<()> {
-    let sf = downloaded_files(download_dir);
+    let sf = downloaded_files(download_dir)?;
     if let Some((sa, f)) = find_archive_by_name(&sf, &name) {
-        extract_downloaded_file(download_dir, cache_dir, sa, f)
+        if extract_downloaded_file(download_dir, cache_dir, sa, f.as_path())? {
+            install_downloaded_file(&cache_dir, &f)?;
+        }
+        Ok(())
     } else if let Some((sa, f)) = find_mod_by_name_fuzzy(&sf, &name) {
-        extract_downloaded_file(download_dir, cache_dir, sa, f)
+        if extract_downloaded_file(download_dir, cache_dir, sa, f.as_path())? {
+            install_downloaded_file(&cache_dir, &f)?;
+        }
+        Ok(())
     } else {
         Err(DownloadError::ArchiveNotFound(name.to_owned()).into())
     }
@@ -144,37 +206,28 @@ fn extract_downloaded_file(
     download_dir: &Utf8Path,
     cache_dir: &Utf8Path,
     archive_type: SupportedArchives,
-    file: OsString,
-) -> Result<()> {
+    file: &Utf8Path,
+) -> Result<bool> {
     //destination:
     //Force utf-8 compatible strings, in lower-case, here to simplify futher code.
-    let file = file.to_string_lossy().to_string();
+    let download_file = Utf8PathBuf::from(download_dir).join(file);
 
-    let download_file = Utf8PathBuf::from(download_dir).join(&file);
-
-    log::info!("Extracting {}", file);
-
-    let file = file.to_lowercase();
-    let archive = Utf8PathBuf::from(cache_dir)
-        .join(file.clone())
-        .with_extension("");
-
-    let ext = download_file.extension();
-    let dmodman_file = download_file.with_extension(&format!("{}.json", ext.unwrap_or_default()));
+    let file = file.as_str().to_lowercase();
+    let archive = cache_dir.join(file.as_str()).with_extension("");
+    let dmodman_file = download_file.add_extension("json");
+    let name = Utf8PathBuf::from(file).with_extension("");
 
     //TODO use dmodman file to verify if file belongs to our current game.
 
-    let mut name = Utf8PathBuf::from(file);
-    name.set_extension("");
-
     if metadata(&archive).map(|m| m.is_dir()).unwrap_or(false)
-        && Manifest::from_file(cache_dir, &archive)
+        && Manifest::from_file(cache_dir, &name)
             .map(|m| m.is_valid())
             .unwrap_or(false)
     {
         // Archive exists and is valid
         // Nothing to do
-        log::debug!("skipping {}", download_file);
+        log::info!("Skipping already extracted {}", download_file);
+        Ok(false)
     } else {
         //TODO: if either one of Dir or Manifest file is missing or corrupt, remove them,
 
@@ -186,7 +239,8 @@ fn extract_downloaded_file(
             }
         }
 
-        log::trace!("extracting {} -> {}", download_file, archive);
+        // log::info!("Extracting {}", download_file);
+        log::info!("Extracting {} to {}", download_file, archive);
         archive_type
             .decompress(download_file.as_std_path(), archive.as_std_path())
             .unwrap();
@@ -196,8 +250,10 @@ fn extract_downloaded_file(
         // not know if their name in the fomod package matches their actual names.
         rename_recursive(&archive)?;
 
+        // TODO: Right now we just copy the dmodman file
+        // we should incorporate it into the manifest
         if dmodman_file.exists() {
-            let archive_dmodman = archive.with_extension(DMODMAN_EXTENTION);
+            let archive_dmodman = archive.add_extension(DMODMAN_EXTENSION);
 
             log::trace!(
                 "copying dmondman file: {} -> {}",
@@ -206,67 +262,33 @@ fn extract_downloaded_file(
             );
             std::fs::copy(&dmodman_file, &archive_dmodman)?;
         }
-
-        let mod_kind = ModKind::detect_mod_type(&cache_dir, &name)?;
-        let _md = mod_kind.create_mod(&cache_dir, &name)?;
+        Ok(true)
     }
-
-    Ok(())
 }
 
-fn rename_recursive(path: &Utf8Path) -> Result<()> {
-    let walker = WalkDir::new(path)
-        .min_depth(1)
-        .max_depth(usize::MAX)
-        .follow_links(false)
-        .same_file_system(true)
-        .contents_first(true);
-
-    for entry in walker {
-        let entry = entry?;
-        let entry_path = Utf8PathBuf::try_from(entry.path().to_path_buf())?;
-
-        if entry_path.is_dir() || entry_path.is_file() {
-            lower_case(&entry_path)?;
-        } else {
-            continue;
-        }
-    }
-
-    Ok(())
-}
-
-fn lower_case(path: &Utf8Path) -> Result<()> {
-    let name = path.file_name().unwrap();
-    let name = name.to_lowercase();
-    let name = path.with_file_name(name);
-
-    log::trace!("ren {} -> {}", path, name);
-
-    std::fs::rename(path, path.with_file_name(name).as_std_path())?;
-
-    Ok(())
+fn install_downloaded_file(cache_dir: &Utf8Path, file: &Utf8Path) -> Result<Manifest> {
+    let file = Utf8PathBuf::from(file.as_str().to_lowercase()).with_extension("");
+    let mod_kind = ModKind::detect_mod_type(&cache_dir, &file)?;
+    mod_kind.create_mod(&cache_dir, &file)
 }
 
 pub fn find_archive_by_name(
-    archive_list: &[(SupportedArchives, OsString)],
+    archive_list: &[(SupportedArchives, Utf8PathBuf)],
     name: &str,
-) -> Option<(SupportedArchives, OsString)> {
-    archive_list.iter().find_map(|(archive_type, f)| {
-        (f.to_string_lossy() == name).then(|| (archive_type.clone(), f.clone()))
-    })
+) -> Option<(SupportedArchives, Utf8PathBuf)> {
+    archive_list
+        .iter()
+        .find_map(|(archive_type, f)| (f == name).then(|| (archive_type.clone(), f.clone())))
 }
 pub fn find_mod_by_name_fuzzy(
-    archive_list: &[(SupportedArchives, OsString)],
+    archive_list: &[(SupportedArchives, Utf8PathBuf)],
     fuzzy_name: &str,
-) -> Option<(SupportedArchives, OsString)> {
+) -> Option<(SupportedArchives, Utf8PathBuf)> {
     let matcher = SkimMatcherV2::default();
     let mut match_vec = Vec::new();
 
     archive_list.iter().for_each(|(st, f)| {
-        let i = matcher
-            .fuzzy_match(f.to_string_lossy().to_string().as_str(), &fuzzy_name)
-            .unwrap_or(0);
+        let i = matcher.fuzzy_match(f.as_str(), &fuzzy_name).unwrap_or(0);
         match_vec.push((st, f, i));
     });
 

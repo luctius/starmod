@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use anyhow::Result;
 
-use crate::mods::Mod;
+use crate::manifest::Manifest;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Conflicts {
@@ -22,7 +22,7 @@ impl Conflicts {
     }
 }
 
-pub fn conflict_list_by_file(mods: &[Mod]) -> Result<HashMap<String, Vec<String>>> {
+pub fn conflict_list_by_file(mods: &[Manifest]) -> Result<HashMap<String, Vec<String>>> {
     let mut all_files = HashMap::new();
 
     // populate with all files
@@ -51,7 +51,7 @@ pub fn conflict_list_by_file(mods: &[Mod]) -> Result<HashMap<String, Vec<String>
     Ok(all_files)
 }
 
-pub fn conflict_list_by_mod(mods: &[Mod]) -> Result<HashMap<String, Conflicts>> {
+pub fn conflict_list_by_mod(mods: &[Manifest]) -> Result<HashMap<String, Conflicts>> {
     let list = conflict_list_by_file(mods)?;
 
     let mut mods_conflicts = HashMap::new();

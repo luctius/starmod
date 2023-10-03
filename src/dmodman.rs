@@ -3,12 +3,13 @@ use std::{
     fs::File,
     io::{BufReader, Read},
 };
+use walkdir::WalkDir;
 
 use anyhow::{Error, Result};
 use serde::Deserialize;
 use xdg::BaseDirectories;
 
-pub const DMODMAN_EXTENTION: &'static str = "dmodman";
+pub const DMODMAN_EXTENSION: &'static str = "dmodman";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct DmodMan {
@@ -19,6 +20,26 @@ pub struct DmodMan {
     update_status: UpdateStatus,
 }
 impl DmodMan {
+    pub fn gather_list(cache_dir: &Utf8Path) -> Result<Vec<DmodMan>> {
+        let mut dmodman_list = Vec::new();
+        let walker = WalkDir::new(cache_dir)
+            .min_depth(1)
+            .max_depth(2)
+            .follow_links(false)
+            .same_file_system(true)
+            .contents_first(true);
+
+        for entry in walker {
+            let entry = entry?;
+            let entry_path = Utf8PathBuf::try_from(entry.path().to_path_buf())?;
+
+            if entry_path.extension().unwrap_or_default() == "json" {
+                dmodman_list.push(DmodMan::try_from(entry_path.as_path())?);
+            }
+        }
+
+        Ok(dmodman_list)
+    }
     pub fn name(&self) -> String {
         self.file_name
             .to_lowercase()
@@ -71,6 +92,19 @@ impl TryFrom<&Utf8Path> for DmodMan {
         Ok(dmodman)
     }
 }
+impl TryFrom<Utf8PathBuf> for DmodMan {
+    type Error = Error;
+
+    fn try_from(path: Utf8PathBuf) -> Result<Self, Self::Error> {
+        Self::try_from(path.as_path())
+    }
+}
+impl PartialEq for DmodMan {
+    fn eq(&self, other: &Self) -> bool {
+        self.game == other.game && self.mod_id == other.mod_id && self.name() == other.name()
+    }
+}
+impl Eq for DmodMan {}
 
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize)]
 pub enum UpdateStatus {
@@ -119,5 +153,32 @@ impl DModManConfig {
         Ok(Utf8PathBuf::try_from(
             xdg_base.get_config_file("config.toml"),
         )?)
+    }
+}
+
+pub trait FindInDmodManList {
+    fn find_dmodman_by_name(&self, mod_name: &str) -> Option<usize>;
+    fn find_dmodman_by_id(&self, nexus_id: u32) -> Option<usize>;
+}
+impl FindInDmodManList for Vec<DmodMan> {
+    fn find_dmodman_by_name(&self, mod_name: &str) -> Option<usize> {
+        self.as_slice().find_dmodman_by_name(mod_name)
+    }
+    fn find_dmodman_by_id(&self, nexus_id: u32) -> Option<usize> {
+        self.as_slice().find_dmodman_by_id(nexus_id)
+    }
+}
+impl FindInDmodManList for &[DmodMan] {
+    fn find_dmodman_by_name(&self, mod_name: &str) -> Option<usize> {
+        self.iter()
+            .enumerate()
+            .find(|(_, dm)| dm.name().eq(mod_name))
+            .map(|(idx, _)| idx)
+    }
+    fn find_dmodman_by_id(&self, nexus_id: u32) -> Option<usize> {
+        self.iter()
+            .enumerate()
+            .find(|(_, dm)| dm.mod_id().eq(&nexus_id))
+            .map(|(idx, _)| idx)
     }
 }
