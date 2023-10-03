@@ -6,10 +6,17 @@ use walkdir::WalkDir;
 use super::install_file::InstallFile;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
-pub struct CustomManifest {}
+pub struct CustomManifest {
+    manifest_dir: Utf8PathBuf,
+}
 impl CustomManifest {
-    pub fn files(&self, cache_dir: &Utf8Path, manifest_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
-        let dir = cache_dir.join(manifest_dir);
+    pub fn new(manifest_dir: &Utf8Path) -> Self {
+        Self {
+            manifest_dir: manifest_dir.to_path_buf(),
+        }
+    }
+    pub fn files(&self, cache_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
+        let dir = cache_dir.join(&self.manifest_dir);
 
         let mut files = Vec::new();
         let walker = WalkDir::new(&dir)

@@ -40,7 +40,8 @@ pub enum DownloadCmd {
     /// Re-install given archive
     ReInstall { name: String },
     /// Update all mods which have an archive in the archive directory with a newer version.
-    UpdateAll,
+    #[clap(visible_alias = "update-all")]
+    UpgradeAll,
 }
 impl DownloadCmd {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
@@ -74,36 +75,50 @@ impl DownloadCmd {
                 }
                 Ok(())
             }
-            Self::UpdateAll => {
+            Self::UpgradeAll => {
                 let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
                 let dmodman_list = HashMap::<_, _>::from_iter(
                     dmodman_list
                         .iter()
-                        .map(|dm| ((dm.name(), dm.mod_id()), dm.version().unwrap_or_default())),
+                        .map(|dm| ((dm.name(), dm.mod_id()), dm.clone())),
                 );
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 mod_list.retain(|md| {
                     dmodman_list
                         .get(&(
-                            md.original_name().to_string(),
+                            md.bare_file_name().to_string(),
                             md.nexus_id().unwrap_or_default(),
                         ))
-                        .map(|v| *v > md.version().unwrap_or_default().to_owned())
+                        .map(|dmod| md.is_an_update(dmod))
                         .unwrap_or(false)
                 });
 
                 for md in mod_list {
-                    let name = md.name().to_owned();
-                    log::info!("Updating '{name}'")
-                    // md.remove()?;
-                    // find_and_extract_archive(
-                    //     settings.download_dir(),
-                    //     settings.cache_dir(),
-                    //     name.as_str(),
-                    // )?;
+                    let priority = md.priority();
+                    let enabled = md.is_enabled();
+                    let name = dmodman_list
+                        .get(&(
+                            md.bare_file_name().to_string(),
+                            md.nexus_id().unwrap_or_default(),
+                        ))
+                        .map(|dmod| dmod.file_name())
+                        .unwrap_or_default();
+                    log::info!("Updating '{name}'");
+                    md.remove()?;
+
+                    if let Some(mut manifest) = find_and_extract_archive(
+                        settings.download_dir(),
+                        settings.cache_dir(),
+                        name,
+                    )? {
+                        manifest.set_priority(priority)?;
+                        if enabled {
+                            manifest.set_enabled()?;
+                        }
+                    }
                 }
 
-                Ok(())
+                list_mods(settings.cache_dir())
             }
         }
     }
@@ -113,13 +128,16 @@ pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> R
     let sf = downloaded_files(download_dir)?;
     let mod_list = Vec::gather_mods(cache_dir)?;
     let mod_list =
-        HashMap::<_, _>::from_iter(mod_list.iter().map(|m| (m.manifest_dir().to_string(), m)));
+        HashMap::<_, _>::from_iter(mod_list.iter().map(|m| (m.bare_file_name().to_string(), m)));
 
     let mut table = create_table(vec!["Archive", "Status"]);
 
     for (_, f) in sf {
-        let dmodman = DmodMan::try_from(download_dir.join(&f).add_extension("json"));
-        let archive = f.with_extension("").as_str().to_lowercase();
+        let dmodman = DmodMan::try_from(download_dir.join(&f).add_extension("json")).ok();
+        let archive = dmodman
+            .as_ref()
+            .map(|dmod| dmod.name())
+            .unwrap_or_else(|| f.with_extension("").as_str().to_lowercase());
         let manifest = mod_list.get(&archive);
 
         log::trace!("testing {} against {}.", f.as_str(), archive);
@@ -129,7 +147,6 @@ pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> R
             manifest.is_some(),
             // is an upgrade
             dmodman
-                .ok()
                 .map(|dmod| manifest.map(|m| m.is_an_update(&dmod)))
                 .flatten()
                 .unwrap_or(false),
@@ -185,18 +202,20 @@ pub fn find_and_extract_archive(
     download_dir: &Utf8Path,
     cache_dir: &Utf8Path,
     name: &str,
-) -> Result<()> {
+) -> Result<Option<Manifest>> {
     let sf = downloaded_files(download_dir)?;
     if let Some((sa, f)) = find_archive_by_name(&sf, &name) {
         if extract_downloaded_file(download_dir, cache_dir, sa, f.as_path())? {
-            install_downloaded_file(&cache_dir, &f)?;
+            install_downloaded_file(&cache_dir, &f).map(|md| Some(md))
+        } else {
+            Ok(None)
         }
-        Ok(())
     } else if let Some((sa, f)) = find_mod_by_name_fuzzy(&sf, &name) {
         if extract_downloaded_file(download_dir, cache_dir, sa, f.as_path())? {
-            install_downloaded_file(&cache_dir, &f)?;
+            install_downloaded_file(&cache_dir, &f).map(|md| Some(md))
+        } else {
+            Ok(None)
         }
-        Ok(())
     } else {
         Err(DownloadError::ArchiveNotFound(name.to_owned()).into())
     }

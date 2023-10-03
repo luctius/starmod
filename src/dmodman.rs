@@ -40,6 +40,9 @@ impl DmodMan {
 
         Ok(dmodman_list)
     }
+    pub fn file_name(&self) -> &str {
+        &self.file_name
+    }
     pub fn name(&self) -> String {
         self.file_name
             .to_lowercase()

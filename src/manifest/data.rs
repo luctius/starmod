@@ -16,11 +16,7 @@ impl DataManifest {
             disabled_files,
         }
     }
-    pub fn files(
-        &self,
-        _cache_dir: &Utf8Path,
-        _manifest_dir: &Utf8Path,
-    ) -> Result<Vec<InstallFile>> {
+    pub fn files(&self, _cache_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
         Ok(self.files.clone())
     }
     pub fn disabled_files(&self) -> Vec<InstallFile> {

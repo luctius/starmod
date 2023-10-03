@@ -125,7 +125,7 @@ impl ModCmd {
             }
             Self::EnableAll => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                mod_list.disable(settings.cache_dir(), settings.game_dir())?;
+                mod_list.enable(settings.cache_dir(), settings.game_dir())?;
                 list_mods(settings.cache_dir())
             }
             Self::EditConfig {

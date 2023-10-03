@@ -48,7 +48,7 @@ pub fn lower_case(path: &Utf8Path) -> Result<()> {
     let name = name.to_lowercase();
     let name = path.with_file_name(name);
 
-    log::trace!("ren {} -> {}", path, name);
+    log::trace!("rename lower-case {} -> {}", path, name);
 
     std::fs::rename(path, path.with_file_name(name).as_std_path())?;
 

@@ -6,8 +6,8 @@ use super::install_file::InstallFile;
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct LoaderManifest {
-    dll: Utf8PathBuf,
-    exe: Utf8PathBuf,
+    dll: InstallFile,
+    exe: InstallFile,
 }
 impl LoaderManifest {
     pub fn new(files: Vec<InstallFile>) -> Self {
@@ -16,35 +16,28 @@ impl LoaderManifest {
             .iter()
             .find_map(|isf| {
                 if isf.source().extension().unwrap_or_default().eq("exe") {
-                    Some(isf.source())
+                    Some(isf)
                 } else {
                     None
                 }
             })
             .unwrap()
-            .to_path_buf();
+            .clone();
         let dll = files
             .iter()
             .find_map(|isf| {
-                if isf.source().extension().unwrap_or_default().eq("exe") {
-                    Some(isf.source())
+                if isf.source().extension().unwrap_or_default().eq("dll") {
+                    Some(isf)
                 } else {
                     None
                 }
             })
             .unwrap()
-            .to_path_buf();
+            .clone();
 
         Self { exe, dll }
     }
-    pub fn files(
-        &self,
-        _cache_dir: &Utf8Path,
-        manifest_dir: &Utf8Path,
-    ) -> Result<Vec<InstallFile>> {
-        Ok(vec![
-            InstallFile::from(manifest_dir.join(&self.dll)),
-            InstallFile::from(manifest_dir.join(&self.exe)),
-        ])
+    pub fn files(&self, _cache_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
+        Ok(vec![self.dll.clone(), self.exe.clone()])
     }
 }

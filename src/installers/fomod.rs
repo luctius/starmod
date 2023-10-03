@@ -59,6 +59,7 @@ pub fn create_fomod_manifest(
         Config::try_from(contents.as_str())?
     };
 
+    let mut bare_file_name = mod_dir.to_string();
     let mut name = info.name;
     let mut version = info.version;
     let mut nexus_id = None;
@@ -66,6 +67,7 @@ pub fn create_fomod_manifest(
         nexus_id = Some(dmodman.mod_id());
         version = dmodman.version();
         name.get_or_insert_with(|| dmodman.name());
+        bare_file_name = dmodman.name();
     }
     let name = name.unwrap_or_else(|| mod_dir.to_string());
 
@@ -149,6 +151,7 @@ pub fn create_fomod_manifest(
     Ok(Manifest::new(
         cache_dir,
         mod_dir,
+        bare_file_name,
         name,
         nexus_id,
         version,

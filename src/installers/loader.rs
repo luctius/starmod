@@ -16,10 +16,9 @@ pub fn create_loader_manifest(
     mod_dir: &Utf8Path,
 ) -> Result<Manifest> {
     let mut files = Vec::new();
-    let mut disabled_files = Vec::new();
+    let disabled_files = Vec::new();
 
-    let mut archive_dir = Utf8PathBuf::from(cache_dir);
-    archive_dir.push(mod_dir);
+    let archive_dir = cache_dir.join(mod_dir);
 
     let dmodman = archive_dir.add_extension(DMODMAN_EXTENSION);
 
@@ -51,16 +50,6 @@ pub fn create_loader_manifest(
         }
     }
 
-    // Disable all files containing 'readme' in the name
-    files.retain(|f: &InstallFile| {
-        if f.source().file_name().unwrap().contains("readme") {
-            disabled_files.push(f.clone());
-            false
-        } else {
-            true
-        }
-    });
-
     let mut version = None;
     let mut nexus_id = None;
     let mut name = mod_dir.to_string();
@@ -73,6 +62,7 @@ pub fn create_loader_manifest(
     Ok(Manifest::new(
         cache_dir,
         mod_dir,
+        name.clone(),
         name,
         nexus_id,
         version,

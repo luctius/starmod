@@ -20,6 +20,7 @@ pub fn create_label_manifest(
         cache_dir,
         name,
         name.to_string(),
+        name.to_string(),
         nexus_id,
         version,
         files,

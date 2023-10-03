@@ -38,22 +38,23 @@ impl ManifestInternal {
         mod_kind: ModKind,
         files: Vec<InstallFile>,
         disabled_files: Vec<InstallFile>,
+        manifest_dir: &Utf8Path,
     ) -> Self {
         match mod_kind {
             ModKind::FoMod | ModKind::Data => Self::Data(DataManifest::new(files, disabled_files)),
             ModKind::Loader => Self::Loader(LoaderManifest::new(files)),
-            ModKind::Custom => Self::Custom(custom::CustomManifest {}),
+            ModKind::Custom => Self::Custom(custom::CustomManifest::new(manifest_dir)),
         }
     }
-    pub fn files(&self, cache_dir: &Utf8Path, manifest_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
+    pub fn files(&self, cache_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
         match self {
-            Self::Data(d) => d.files(cache_dir, manifest_dir),
-            Self::Loader(l) => l.files(cache_dir, manifest_dir),
-            Self::Custom(c) => c.files(cache_dir, manifest_dir),
+            Self::Data(d) => d.files(cache_dir),
+            Self::Loader(l) => l.files(cache_dir),
+            Self::Custom(c) => c.files(cache_dir),
         }
     }
-    pub fn dest_files(&self, cache_dir: &Utf8Path, manifest_dir: &Utf8Path) -> Result<Vec<String>> {
-        let files = self.files(cache_dir, manifest_dir)?;
+    pub fn dest_files(&self, cache_dir: &Utf8Path) -> Result<Vec<String>> {
+        let files = self.files(cache_dir)?;
         let mut dest_files = Vec::with_capacity(files.len());
         for f in &files {
             dest_files.push(f.destination().to_string());
@@ -65,7 +66,7 @@ impl ManifestInternal {
         cache_dir: &Utf8Path,
         manifest_dir: &Utf8Path,
     ) -> Result<Vec<Utf8PathBuf>> {
-        let files = self.files(cache_dir, manifest_dir)?;
+        let files = self.files(cache_dir)?;
         let mut origin_files = Vec::with_capacity(files.len());
         for f in &files {
             let origin = f.source();
@@ -103,7 +104,7 @@ pub struct Manifest {
     #[serde(skip_serializing, default)]
     cache_dir: Utf8PathBuf,
     manifest_dir: Utf8PathBuf,
-    original_name: String,
+    bare_file_name: String,
     name: String,
     version: Option<String>,
     nexus_id: Option<u32>,
@@ -116,6 +117,7 @@ impl Manifest {
     pub fn new(
         cache_dir: &Utf8Path,
         manifest_dir: &Utf8Path,
+        bare_file_name: String,
         name: String,
         nexus_id: Option<u32>,
         version: Option<String>,
@@ -126,14 +128,14 @@ impl Manifest {
         Self {
             cache_dir: cache_dir.to_path_buf(),
             manifest_dir: manifest_dir.to_path_buf(),
-            original_name: name.clone(),
+            bare_file_name,
             name,
             nexus_id,
             version,
             mod_state: ModState::Disabled,
             priority: 0,
             mod_kind,
-            internal: ManifestInternal::new(mod_kind, files, disabled_files),
+            internal: ManifestInternal::new(mod_kind, files, disabled_files, manifest_dir),
         }
     }
     pub fn set_priority(&mut self, priority: isize) -> Result<()> {
@@ -180,8 +182,8 @@ impl Manifest {
     pub fn manifest_dir(&self) -> &Utf8Path {
         &self.manifest_dir
     }
-    pub fn original_name(&self) -> &str {
-        &self.original_name
+    pub fn bare_file_name(&self) -> &str {
+        &self.bare_file_name
     }
     pub fn name(&self) -> &str {
         &self.name
@@ -208,7 +210,7 @@ impl Manifest {
         self.mod_state
     }
     pub fn files(&self) -> Result<Vec<InstallFile>> {
-        self.internal.files(&self.cache_dir, &self.manifest_dir)
+        self.internal.files(&self.cache_dir)
     }
     pub fn enlist_files(
         &self,
@@ -237,8 +239,7 @@ impl Manifest {
         Ok(enlisted_files)
     }
     pub fn dest_files(&self) -> Result<Vec<String>> {
-        self.internal
-            .dest_files(&self.cache_dir, &self.manifest_dir)
+        self.internal.dest_files(&self.cache_dir)
     }
     pub fn origin_files(&self) -> Result<Vec<Utf8PathBuf>> {
         self.internal
@@ -283,7 +284,7 @@ impl Manifest {
         self.mod_kind
     }
     pub fn is_an_update(&self, dmodman: &DmodMan) -> bool {
-        dmodman.name() == self.original_name
+        dmodman.name() == self.bare_file_name
             && dmodman.mod_id() == self.nexus_id.unwrap_or_default()
             && dmodman.version().unwrap_or_default() > self.version.clone().unwrap_or_default()
     }

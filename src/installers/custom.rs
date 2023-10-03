@@ -58,6 +58,7 @@ pub fn create_custom_manifest(
         cache_dir,
         name,
         name.to_string(),
+        name.to_string(),
         nexus_id,
         version,
         files,
