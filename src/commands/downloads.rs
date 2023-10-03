@@ -174,6 +174,9 @@ pub fn downloaded_files(download_dir: &Utf8Path) -> Result<Vec<(SupportedArchive
     let mut supported_files = Vec::new();
     let paths = fs::read_dir(download_dir).unwrap();
 
+    // TODO check for a dmodman file
+    // and check for the game in that file
+
     for path in paths {
         if let Ok(path) = path {
             if let Ok(typ) = SupportedArchives::from_path(&path.path()) {

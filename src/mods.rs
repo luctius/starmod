@@ -245,7 +245,6 @@ impl ModList for &mut [Manifest] {
             Ok::<(), anyhow::Error>(())
         })?;
 
-        // progress.finish_with_message("Mods Enabled");
         progress.finish_and_clear();
 
         Ok(())
