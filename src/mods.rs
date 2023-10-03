@@ -2,11 +2,13 @@ use std::{
     collections::HashSet,
     fmt::Display,
     fs::{self, read_link, remove_dir, remove_file, rename, DirBuilder},
+    sync::{Arc, Mutex},
 };
 
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
+use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
@@ -171,30 +173,38 @@ impl ModList for Vec<Manifest> {
 }
 impl ModList for &mut [Manifest] {
     fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
+        use rayon::prelude::*;
+
         let conflict_list = conflict_list_by_file(self)?;
         let mut file_list = Vec::with_capacity(conflict_list.len());
-        let mut dir_cache = Vec::new();
+        let dir_cache = Arc::new(Mutex::new(HashSet::new()));
 
         log::debug!("Collecting File List");
         for m in self.iter() {
             file_list.extend(m.enlist_files(&conflict_list)?);
         }
 
-        log::trace!("file_list: {:?}", file_list);
+        let sty = ProgressStyle::with_template("{prefix:.bold.dim} {wide_msg}: {bar:40}").unwrap();
+        let progress = ProgressBar::new(file_list.len() as u64 + self.len() as u64)
+            .with_style(sty)
+            .with_message("Linking files...");
 
         log::debug!("Installing Files");
-        for f in file_list {
+        file_list.par_iter().try_for_each(|f| {
+            // for f in file_list {
             let origin = cache_dir.clone().join(f.source());
             let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
             log::trace!("starting with file: {} -> {}", origin, destination);
 
             let destination_base = destination.parent().unwrap().to_path_buf();
-            if !dir_cache.contains(&destination_base) {
+            if !dir_cache.lock().unwrap().contains(&destination_base) {
+                log::trace!("creating directory {destination_base}");
+
                 //create intermediate directories
                 DirBuilder::new()
                     .recursive(true)
                     .create(&destination_base)?;
-                dir_cache.push(destination_base);
+                dir_cache.lock().unwrap().insert(destination_base);
             }
 
             // Remove existing symlinks which point back to our archive dir
@@ -209,6 +219,8 @@ impl ModList for &mut [Manifest] {
                 }
             }
 
+            // Check if there is a backup file made by us
+            // if so, restore it.
             if destination.is_file() {
                 let bkp_destination = destination.add_extension(BACKUP_EXTENTION);
                 log::info!(
@@ -222,16 +234,25 @@ impl ModList for &mut [Manifest] {
             std::os::unix::fs::symlink(&origin, &destination)?;
 
             log::debug!("link {} to {}", origin, destination);
-        }
+            progress.inc(1);
+            Ok::<(), anyhow::Error>(())
+        })?;
 
         log::debug!("Set Mods to Enabled");
-        for m in self.iter_mut() {
+        self.par_iter_mut().try_for_each(|m| {
             m.set_enabled()?;
-        }
+            progress.inc(1);
+            Ok::<(), anyhow::Error>(())
+        })?;
+
+        // progress.finish_with_message("Mods Enabled");
+        progress.finish_and_clear();
 
         Ok(())
     }
     fn disable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
+        use rayon::prelude::*;
+
         let conflict_list = conflict_list_by_file(self)?;
         let mut file_list = Vec::with_capacity(conflict_list.len());
 
@@ -240,10 +261,13 @@ impl ModList for &mut [Manifest] {
             file_list.extend(m.enlist_files(&conflict_list)?);
         }
 
+        let sty = ProgressStyle::with_template("{prefix:.bold.dim} {wide_msg}: {bar:40}").unwrap();
+        let progress = ProgressBar::new(file_list.len() as u64 + self.len() as u64).with_style(sty);
+
         log::trace!("file_list: {:?}", file_list);
 
         log::debug!("Start Removing files");
-        for f in file_list {
+        file_list.par_iter().try_for_each(|f| {
             let origin = cache_dir.clone().join(f.source());
             let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
 
@@ -256,7 +280,17 @@ impl ModList for &mut [Manifest] {
             } else {
                 log::debug!("passing-over {}", destination);
             }
-        }
+            progress.inc(1);
+            Ok::<(), anyhow::Error>(())
+        })?;
+
+        log::debug!("Set Mods to Disabled.");
+        self.par_iter_mut().try_for_each(|m| {
+            m.set_disabled()?;
+            progress.inc(1);
+            Ok::<(), anyhow::Error>(())
+        })?;
+        progress.finish_and_clear();
 
         log::debug!("Clean-up Game Dir");
         let walker = WalkDir::new(&game_dir)
@@ -295,11 +329,6 @@ impl ModList for &mut [Manifest] {
                 log::debug!("Trying to remove dir {}.", entry_path.display());
                 let _ = remove_dir(entry_path);
             }
-        }
-
-        log::debug!("Set Mods to Disabled.");
-        for m in self.iter_mut() {
-            m.set_disabled()?;
         }
 
         Ok(())

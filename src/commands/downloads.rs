@@ -1,6 +1,9 @@
 use std::{
     collections::{HashMap, HashSet},
     fs::{self, metadata, remove_dir_all, remove_file},
+    sync::{atomic::AtomicBool, Arc, Mutex},
+    thread,
+    time::Duration,
 };
 
 use crate::{
@@ -17,6 +20,7 @@ use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
 use comfy_table::{Cell, Color};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
+use indicatif::{MultiProgress, ProgressBar, ProgressFinish, ProgressStyle};
 use thiserror::Error;
 
 use super::list::list_mods;
@@ -184,15 +188,53 @@ pub fn downloaded_files(download_dir: &Utf8Path) -> Result<Vec<(SupportedArchive
 
 pub fn extract_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
     let sf = downloaded_files(download_dir)?;
-    let mut extracted_files = Vec::with_capacity(sf.len());
-    for (typ, f) in &sf {
-        if extract_downloaded_file(download_dir, cache_dir, *typ, f)? {
-            extracted_files.push(f);
-        }
-    }
+    let extracted_files = Vec::with_capacity(sf.len());
+    let extracted_files = Arc::new(Mutex::new(extracted_files));
 
-    for name in extracted_files {
-        install_downloaded_file(&cache_dir, &name)?;
+    let sty = ProgressStyle::with_template("{prefix:.bold.dim} {spinner} {wide_msg}").unwrap();
+    let multi = MultiProgress::new();
+    let running = AtomicBool::new(true);
+
+    let mut progress_bars = Vec::with_capacity(sf.len());
+
+    for (_, f) in &sf {
+        let p = ProgressBar::new(1).with_style(sty.clone());
+        multi.add(p.clone());
+        progress_bars.push(p.clone());
+        p.set_message(format!("Extracting: {}", f));
+    }
+    let progress_bars = Arc::new(progress_bars);
+
+    thread::scope(|s| {
+        s.spawn(|| {
+            while running.load(std::sync::atomic::Ordering::Relaxed) {
+                for pb in progress_bars.iter() {
+                    if !pb.is_finished() {
+                        pb.tick();
+                    }
+                }
+                thread::sleep(Duration::from_millis(70));
+            }
+        });
+        use rayon::prelude::*;
+
+        sf.par_iter().enumerate().try_for_each(|(idx, (typ, f))| {
+            if extract_downloaded_file(download_dir, cache_dir, *typ, f)? {
+                extracted_files.lock().unwrap().push(f.as_path());
+                progress_bars[idx].inc(1);
+                progress_bars[idx].finish_with_message(format!("Extracting: {} ... => Done.", f));
+            } else {
+                progress_bars[idx].finish_with_message(format!("Skipped: {} ... => Done.", f));
+            }
+            Ok::<(), anyhow::Error>(())
+        })?;
+
+        running.store(false, std::sync::atomic::Ordering::Relaxed);
+        Ok::<(), anyhow::Error>(())
+    })?;
+
+    for name in extracted_files.lock().unwrap().iter() {
+        install_downloaded_file(&cache_dir, name)?;
     }
 
     Ok(())
@@ -245,7 +287,7 @@ fn extract_downloaded_file(
     {
         // Archive exists and is valid
         // Nothing to do
-        log::info!("Skipping already extracted {}", download_file);
+        log::debug!("Skipping already extracted {}", download_file);
         Ok(false)
     } else {
         //TODO: if either one of Dir or Manifest file is missing or corrupt, remove them,
@@ -259,7 +301,7 @@ fn extract_downloaded_file(
         }
 
         // log::info!("Extracting {}", download_file);
-        log::info!("Extracting {} to {}", download_file, archive);
+        log::debug!("Extracting {} to {}", download_file, archive);
         archive_type
             .decompress(download_file.as_std_path(), archive.as_std_path())
             .unwrap();

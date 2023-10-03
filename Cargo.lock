@@ -1435,6 +1435,7 @@ dependencies = [
  "indicatif-log-bridge",
  "libloadorder",
  "log",
+ "rayon",
  "read-stdin",
  "ron",
  "rust-lzma",
