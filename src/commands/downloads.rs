@@ -57,11 +57,11 @@ impl DownloadCmd {
                     settings.cache_dir(),
                     name.as_str(),
                 )?;
-                list_mods(settings.cache_dir())
+                list_mods(settings)
             }
             Self::ExtractAll => {
                 extract_downloaded_files(settings.download_dir(), settings.cache_dir())?;
-                list_mods(settings.cache_dir())
+                list_mods(settings)
             }
             Self::ReInstall { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
@@ -122,7 +122,7 @@ impl DownloadCmd {
                     }
                 }
 
-                list_mods(settings.cache_dir())
+                list_mods(settings)
             }
         }
     }

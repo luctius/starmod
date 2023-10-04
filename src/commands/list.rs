@@ -7,6 +7,7 @@ use comfy_table::{Cell, Color};
 
 use crate::{
     conflict::{conflict_list_by_file, conflict_list_by_mod},
+    dmodman::DmodMan,
     mods::GatherModList,
     settings::{create_table, Settings},
     tag::Tag,
@@ -30,7 +31,7 @@ pub enum ListCmd {
 impl ListCmd {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
         match self {
-            Self::ModList => list_mods(&settings.cache_dir()),
+            Self::ModList => list_mods(settings),
             Self::Conflicts => list_conflicts(&settings.cache_dir()),
             Self::Files => list_files(&settings.cache_dir()),
             Self::DisabledFiles => list_disabled_files(&settings.cache_dir()),
@@ -38,14 +39,14 @@ impl ListCmd {
     }
 }
 
-pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
-    let mod_list = Vec::gather_mods(cache_dir)?;
+pub fn list_mods(settings: &Settings) -> Result<()> {
+    let mod_list = Vec::gather_mods(settings.cache_dir())?;
     let conflict_list = conflict_list_by_mod(&mod_list)?;
 
     //TODO: create seperate tables for each label we encounter.
 
     let mut table = create_table(vec![
-        "Index", "Name", "Priority", "Status", "Version", "Nexus Id", "Mod Type",
+        "Index", "Name", "Priority", "Status", "Version", "Nexus Id", "Mod Type", "Notes",
     ]);
 
     for (idx, md) in mod_list.iter().enumerate() {
@@ -89,6 +90,15 @@ pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
 
         let color = Color::from(tag);
 
+        let notes = {
+            let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
+            if dmodman_list.iter().any(|dmod| md.is_an_update(dmod)) {
+                "Update Available"
+            } else {
+                ""
+            }
+        };
+
         table.add_row(vec![
             Cell::new(idx.to_string()).fg(color),
             Cell::new(md.name().to_string()).fg(color),
@@ -102,6 +112,7 @@ pub fn list_mods(cache_dir: &Utf8Path) -> Result<()> {
             )
             .fg(color),
             Cell::new(md.kind().to_string()).fg(color),
+            Cell::new(notes),
         ]);
     }
 

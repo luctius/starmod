@@ -84,7 +84,7 @@ impl ModCmd {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&name) {
                     mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
-                    list_mods(settings.cache_dir())
+                    list_mods(settings)
                 } else {
                     log::info!("Couldn't find a mod by name '{name}'");
                     Ok(())
@@ -93,7 +93,7 @@ impl ModCmd {
             Self::DisableAll => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 mod_list.disable(settings.cache_dir(), settings.game_dir())?;
-                list_mods(settings.cache_dir())
+                list_mods(settings)
             }
             Self::DisableFile {
                 mod_name,
@@ -117,7 +117,7 @@ impl ModCmd {
                         mod_list[idx].set_priority(prio)?;
                     }
                     mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
-                    list_mods(settings.cache_dir())
+                    list_mods(settings)
                 } else {
                     log::info!("Couldn't find a mod by name '{name}'");
                     Ok(())
@@ -126,7 +126,7 @@ impl ModCmd {
             Self::EnableAll => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 mod_list.enable(settings.cache_dir(), settings.game_dir())?;
-                list_mods(settings.cache_dir())
+                list_mods(settings)
             }
             Self::EditConfig {
                 name,
@@ -136,7 +136,7 @@ impl ModCmd {
             } => {
                 edit_mod_config_files(settings, name, destination_mod_name, config_name, extension)
             }
-            Self::List => list_mods(settings.cache_dir()),
+            Self::List => list_mods(settings),
             Self::Show { name } => show_mod(settings.cache_dir(), &name),
             Self::CreateCustom { origin, name } => {
                 let destination = settings.cache_dir().join(&name);
@@ -166,7 +166,7 @@ impl ModCmd {
                     mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                     mod_list[idx].remove()?;
                     log::info!("Removed mod '{}'", mod_list[idx].name());
-                    list_mods(settings.cache_dir())?;
+                    list_mods(settings)?;
                 } else {
                     log::warn!("Mod '{name}' not found.")
                 }
@@ -179,7 +179,7 @@ impl ModCmd {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&old_mod_name) {
                     mod_list[idx].set_name(new_mod_name)?;
-                    list_mods(settings.cache_dir())?;
+                    list_mods(settings)?;
                 } else {
                     log::warn!("Mod '{old_mod_name}' not found.")
                 }
@@ -192,7 +192,7 @@ impl ModCmd {
                     if priority < 0 {
                         mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                     }
-                    crate::commands::list::list_mods(settings.cache_dir())?;
+                    crate::commands::list::list_mods(settings)?;
                 } else {
                     log::warn!("Mod '{name}' not found.")
                 }
