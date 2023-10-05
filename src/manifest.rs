@@ -112,6 +112,7 @@ pub struct Manifest {
     mod_kind: ModKind,
     priority: isize,
     internal: ManifestInternal,
+    tags: Vec<String>,
 }
 impl Manifest {
     pub fn new(
@@ -136,6 +137,7 @@ impl Manifest {
             priority: 0,
             mod_kind,
             internal: ManifestInternal::new(mod_kind, files, disabled_files, manifest_dir),
+            tags: Vec::new(), //TODO: shall we add modkind as a tag?
         }
     }
     pub fn set_priority(&mut self, priority: isize) -> Result<()> {
@@ -288,6 +290,34 @@ impl Manifest {
         dmodman.name() == self.bare_file_name
             && dmodman.mod_id() == self.nexus_id.unwrap_or_default()
             && dmodman.version().unwrap_or_default() > self.version.clone().unwrap_or_default()
+    }
+    pub fn tags(&self) -> &[String] {
+        &self.tags
+    }
+    pub fn add_tag(&mut self, tag: &str) -> Result<bool> {
+        let tag = tag.to_lowercase();
+        if !self.tags.contains(&tag) {
+            self.tags.push(tag);
+            self.write().map(|_| true)
+        } else {
+            Ok(false)
+        }
+    }
+    pub fn remove_tag(&mut self, tag: &str) -> Result<bool> {
+        let tag = tag.to_lowercase();
+
+        if let Some(idx) = self
+            .tags
+            .iter()
+            .enumerate()
+            .find(|(_, t)| *t == &tag)
+            .map(|(idx, _)| idx)
+        {
+            self.tags.swap_remove(idx);
+            self.write().map(|_| true)
+        } else {
+            Ok(true)
+        }
     }
 }
 impl<'a> TryFrom<&'a Utf8Path> for Manifest {

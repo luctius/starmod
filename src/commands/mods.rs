@@ -17,6 +17,8 @@ use crate::{
 
 use super::list::list_mods;
 
+//TODO: create custom and tag sub-commands
+
 #[derive(Debug, Clone, Parser, Default)]
 pub enum ModCmd {
     /// Copy 'file_name' from mod 'origin_mod' to mod 'custom_mod'
@@ -63,6 +65,10 @@ pub enum ModCmd {
     #[clap(visible_alias = "s")]
     /// Show the details of mod 'name'
     Show { name: String },
+    /// Add tag <tag> to mod <name>
+    TagAdd { name: String, tag: String },
+    /// Remove tag <tag> from mod <name>
+    TagRemove { name: String, tag: String },
     /// Remove mod 'name' from installation.
     /// Does not remove the mod from the downloads directory.
     Remove { name: String },
@@ -193,6 +199,32 @@ impl ModCmd {
                         mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                     }
                     crate::commands::list::list_mods(settings)?;
+                } else {
+                    log::warn!("Mod '{name}' not found.")
+                }
+                Ok(())
+            }
+            Self::TagAdd { name, tag } => {
+                let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
+                if let Some(idx) = mod_list.find_mod(&name) {
+                    if !mod_list[idx].add_tag(&tag)? {
+                        log::warn!("Unable to add tag {tag} to mod {name}.")
+                    } else {
+                        log::info!("Added tag {tag} to mod {name}.");
+                    }
+                } else {
+                    log::warn!("Mod '{name}' not found.")
+                }
+                Ok(())
+            }
+            Self::TagRemove { name, tag } => {
+                let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
+                if let Some(idx) = mod_list.find_mod(&name) {
+                    if !mod_list[idx].remove_tag(&tag)? {
+                        log::warn!("Unable to remove tag {tag} from mod {name}.")
+                    } else {
+                        log::info!("Removed tag {tag} from mod {name}.");
+                    }
                 } else {
                     log::warn!("Mod '{name}' not found.")
                 }

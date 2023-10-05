@@ -26,7 +26,10 @@ pub enum ListCmd {
     /// Files shown in red are ignored and green files are used instead.
     #[clap(visible_alias = "f")]
     Files,
+    /// Show all disabled files
     DisabledFiles,
+    ///Show all mods containing <tag>
+    Tag,
 }
 impl ListCmd {
     pub fn execute(self, settings: &mut Settings) -> Result<()> {
@@ -35,6 +38,7 @@ impl ListCmd {
             Self::Conflicts => list_conflicts(&settings.cache_dir()),
             Self::Files => list_files(&settings.cache_dir()),
             Self::DisabledFiles => list_disabled_files(&settings.cache_dir()),
+            Self::Tag => todo!(),
         }
     }
 }
@@ -46,7 +50,7 @@ pub fn list_mods(settings: &Settings) -> Result<()> {
     //TODO: create seperate tables for each label we encounter.
 
     let mut table = create_table(vec![
-        "Index", "Name", "Priority", "Status", "Version", "Nexus Id", "Mod Type", "Notes",
+        "Index", "Name", "Priority", "Status", "Version", "Nexus Id", "Mod Type", "Tags", "Notes",
     ]);
 
     for (idx, md) in mod_list.iter().enumerate() {
@@ -112,6 +116,7 @@ pub fn list_mods(settings: &Settings) -> Result<()> {
             )
             .fg(color),
             Cell::new(md.kind().to_string()).fg(color),
+            Cell::new(format!("{:?}", md.tags())),
             Cell::new(notes),
         ]);
     }
