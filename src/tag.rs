@@ -17,12 +17,12 @@ impl Display for Tag {
             f,
             "{}",
             match self {
-                Tag::Enabled => "Enabled",
-                Tag::Winner => "Winner",
-                Tag::Loser => "Loser",
-                Tag::CompleteLoser => "All Files Overwritten",
-                Tag::Conflict => "Conflict",
-                Tag::Disabled => "Disabled",
+                Self::Enabled => "Enabled",
+                Self::Winner => "Winner",
+                Self::Loser => "Loser",
+                Self::CompleteLoser => "All Files Overwritten",
+                Self::Conflict => "Conflict",
+                Self::Disabled => "Disabled",
             }
         )
     }
@@ -42,22 +42,22 @@ impl From<Tag> for char {
 impl From<Tag> for Color {
     fn from(tag: Tag) -> Self {
         match tag {
-            Tag::Enabled => Color::White,
-            Tag::Winner => Color::Green,
-            Tag::Loser => Color::Yellow,
-            Tag::CompleteLoser => Color::Red,
-            Tag::Conflict => Color::Magenta,
-            Tag::Disabled => Color::DarkGrey,
+            Tag::Enabled => Self::White,
+            Tag::Winner => Self::Green,
+            Tag::Loser => Self::Yellow,
+            Tag::CompleteLoser => Self::Red,
+            Tag::Conflict => Self::Magenta,
+            Tag::Disabled => Self::DarkGrey,
         }
     }
 }
 impl From<(bool, bool)> for Tag {
     fn from((loser, winner): (bool, bool)) -> Self {
         match (loser, winner) {
-            (false, false) => Tag::Enabled,
-            (false, true) => Tag::Winner,
-            (true, false) => Tag::Loser,
-            (true, true) => Tag::Conflict,
+            (false, false) => Self::Enabled,
+            (false, true) => Self::Winner,
+            (true, false) => Self::Loser,
+            (true, true) => Self::Conflict,
         }
     }
 }

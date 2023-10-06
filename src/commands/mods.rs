@@ -84,7 +84,7 @@ pub enum ModCmd {
     SetPriority { name: String, priority: isize },
 }
 impl ModCmd {
-    pub fn execute(self, settings: &mut Settings) -> Result<()> {
+    pub fn execute(self, settings: &Settings) -> Result<()> {
         match self {
             Self::Disable { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
@@ -106,15 +106,20 @@ impl ModCmd {
                 file_name,
             } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(&mod_name) {
-                    if !mod_list[idx].disable_file(&file_name)? {
-                        log::info!("Couldn't find a file by name '{file_name}' in mod: {mod_name}");
-                    }
-                    Ok(())
-                } else {
-                    log::info!("Couldn't find a mod by name '{mod_name}'");
-                    Ok(())
-                }
+                mod_list.find_mod(&mod_name).map_or_else(
+                    || {
+                        log::info!("Couldn't find a mod by name '{mod_name}'");
+                        Ok(())
+                    },
+                    |idx| {
+                        if !mod_list[idx].disable_file(&file_name) {
+                            log::info!(
+                                "Couldn't find a file by name '{file_name}' in mod: {mod_name}"
+                            );
+                        }
+                        Ok(())
+                    },
+                )
             }
             Self::Enable { name, priority } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
@@ -139,9 +144,13 @@ impl ModCmd {
                 destination_mod_name,
                 config_name,
                 extension,
-            } => {
-                edit_mod_config_files(settings, name, destination_mod_name, config_name, extension)
-            }
+            } => edit_mod_config_files(
+                settings,
+                &name,
+                &destination_mod_name,
+                &config_name,
+                &extension,
+            ),
             Self::List => list_mods(settings),
             Self::Show { name } => show_mod(settings.cache_dir(), &name),
             Self::CreateCustom { origin, name } => {
@@ -174,7 +183,7 @@ impl ModCmd {
                     log::info!("Removed mod '{}'", mod_list[idx].name());
                     list_mods(settings)?;
                 } else {
-                    log::warn!("Mod '{name}' not found.")
+                    log::warn!("Mod '{name}' not found.");
                 }
                 Ok(())
             }
@@ -187,7 +196,7 @@ impl ModCmd {
                     mod_list[idx].set_name(new_mod_name)?;
                     list_mods(settings)?;
                 } else {
-                    log::warn!("Mod '{old_mod_name}' not found.")
+                    log::warn!("Mod '{old_mod_name}' not found.");
                 }
                 Ok(())
             }
@@ -200,33 +209,33 @@ impl ModCmd {
                     }
                     crate::commands::list::list_mods(settings)?;
                 } else {
-                    log::warn!("Mod '{name}' not found.")
+                    log::warn!("Mod '{name}' not found.");
                 }
                 Ok(())
             }
             Self::TagAdd { name, tag } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&name) {
-                    if !mod_list[idx].add_tag(&tag)? {
-                        log::warn!("Unable to add tag {tag} to mod {name}.")
-                    } else {
+                    if mod_list[idx].add_tag(&tag)? {
                         log::info!("Added tag {tag} to mod {name}.");
+                    } else {
+                        log::warn!("Unable to add tag {tag} to mod {name}.");
                     }
                 } else {
-                    log::warn!("Mod '{name}' not found.")
+                    log::warn!("Mod '{name}' not found.");
                 }
                 Ok(())
             }
             Self::TagRemove { name, tag } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&name) {
-                    if !mod_list[idx].remove_tag(&tag)? {
-                        log::warn!("Unable to remove tag {tag} from mod {name}.")
-                    } else {
+                    if mod_list[idx].remove_tag(&tag)? {
                         log::info!("Removed tag {tag} from mod {name}.");
+                    } else {
+                        log::warn!("Unable to remove tag {tag} from mod {name}.");
                     }
                 } else {
-                    log::warn!("Mod '{name}' not found.")
+                    log::warn!("Mod '{name}' not found.");
                 }
                 Ok(())
             }
@@ -289,7 +298,7 @@ fn show_mod(cache_dir: &Utf8Path, mod_name: &str) -> Result<()> {
 }
 
 fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
-    let conflict_list_file = conflict_list_by_file(&mod_list)?;
+    let conflict_list_file = conflict_list_by_file(mod_list)?;
     let md = &mod_list[idx];
 
     let color = Color::White;
@@ -305,8 +314,7 @@ fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
         Cell::new(md.version().unwrap_or("<Unknown>").to_string()).fg(color),
         Cell::new(
             md.nexus_id()
-                .map(|nid| nid.to_string())
-                .unwrap_or("<Unknown>".to_owned()),
+                .map_or("<Unknown>".to_owned(), |nid| nid.to_string()),
         )
         .fg(color),
     ]);
@@ -332,9 +340,8 @@ fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
     let mut table = create_table(vec!["File", "Destination"]);
 
     for (isf, (name, _priority)) in files {
-        let mut color = Color::White;
-        if conflict_list_file.contains_key(&isf.destination().to_string()) {
-            color = if conflict_list_file
+        let color = if conflict_list_file.contains_key(&isf.destination().to_string()) {
+            if conflict_list_file
                 .get(&isf.destination().to_string())
                 .unwrap()
                 .last()
@@ -344,8 +351,10 @@ fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
                 Color::Green
             } else {
                 Color::Red
-            };
-        }
+            }
+        } else {
+            Color::White
+        };
 
         table.add_row(vec![
             Cell::new(isf.source().to_string()).fg(color),
@@ -359,11 +368,11 @@ fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
 
     log::info!("");
 
-    if !md.disabled_files()?.is_empty() {
+    if !md.disabled_files().is_empty() {
         let mut table = create_table(vec!["Disabled File"]);
 
         let color = Color::Grey;
-        for isf in md.disabled_files()? {
+        for isf in md.disabled_files() {
             table.add_row(vec![Cell::new(isf.source().to_string()).fg(color)]);
         }
 
@@ -374,58 +383,59 @@ fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
 }
 
 fn edit_mod_config_files(
-    settings: &Settings,
-    name: String,
-    destination_mod_name: String,
-    config_name: Option<String>,
-    extension: Option<String>,
+    _settings: &Settings,
+    _name: &str,
+    _destination_mod_name: &str,
+    _config_name: &Option<String>,
+    _extension: &Option<String>,
 ) -> Result<()> {
-    let mut config_files_to_edit = Vec::new();
-    let mod_list = Vec::gather_mods(settings.cache_dir())?;
-    if let Some(idx) = mod_list.find_mod(&name) {
-        let config_list = mod_list[idx].find_config_files(extension.as_deref())?;
-        if let Some(config_name) = config_name {
-            if let Some(cf) = config_list
-                .iter()
-                .find(|f| f.file_name().unwrap_or_default() == config_name)
-            {
-                let mut config_path = settings.cache_dir().to_path_buf();
-                config_path.push(cf);
-                config_files_to_edit.push(config_path)
-            }
-        } else {
-            for cf in config_list {
-                let mut config_path = settings.cache_dir().to_path_buf();
-                config_path.push(cf);
-                config_files_to_edit.push(config_path)
-            }
-        }
-    }
+    todo!()
+    // let mut config_files_to_edit = Vec::new();
+    // let mod_list = Vec::gather_mods(settings.cache_dir())?;
+    // if let Some(idx) = mod_list.find_mod(&name) {
+    //     let config_list = mod_list[idx].find_config_files(extension.as_deref())?;
+    //     if let Some(config_name) = config_name {
+    //         if let Some(cf) = config_list
+    //             .iter()
+    //             .find(|f| f.file_name().unwrap_or_default() == config_name)
+    //         {
+    //             let mut config_path = settings.cache_dir().to_path_buf();
+    //             config_path.push(cf);
+    //             config_files_to_edit.push(config_path);
+    //         }
+    //     } else {
+    //         for cf in config_list {
+    //             let mut config_path = settings.cache_dir().to_path_buf();
+    //             config_path.push(cf);
+    //             config_files_to_edit.push(config_path);
+    //         }
+    //     }
+    // }
 
-    if !config_files_to_edit.is_empty() {
-        if let Some(_destination_manifest) = mod_list.find_mod(&destination_mod_name) {
-            todo!();
-            // for f in config_files_to_edit {
-            //     f.strip_prefix(settings.cache_dir())
-            //         .unwrap()
-            //         .strip_prefix(manifest)
-            // }
+    // if !config_files_to_edit.is_empty() {
+    //     if let Some(_destination_manifest) = mod_list.find_mod(&destination_mod_name) {
+    //         todo!();
+    //         // for f in config_files_to_edit {
+    //         //     f.strip_prefix(settings.cache_dir())
+    //         //         .unwrap()
+    //         //         .strip_prefix(manifest)
+    //         // }
 
-            // log::info!("Editing: {:?}", config_files_to_edit);
+    //         // log::info!("Editing: {:?}", config_files_to_edit);
 
-            // let mut editor_cmd = std::process::Command::new(settings.editor());
-            // for f in config_files_to_edit {
-            //     let _ = editor_cmd.arg(f);
-            // }
+    //         // let mut editor_cmd = std::process::Command::new(settings.editor());
+    //         // for f in config_files_to_edit {
+    //         //     let _ = editor_cmd.arg(f);
+    //         // }
 
-            // let status = editor_cmd.spawn()?.wait()?;
-            // if !status.success() {
-            //     log::info!("Editor failed with exit status: {}", status);
-            // }
-        }
-    } else {
-        log::info!("No relevant config files found.");
-    }
+    //         // let status = editor_cmd.spawn()?.wait()?;
+    //         // if !status.success() {
+    //         //     log::info!("Editor failed with exit status: {}", status);
+    //         // }
+    //     }
+    // } else {
+    //     log::info!("No relevant config files found.");
+    // }
 
-    Ok(())
+    // Ok(())
 }

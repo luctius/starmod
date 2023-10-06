@@ -8,7 +8,7 @@ pub enum ModState {
     Disabled,
 }
 impl ModState {
-    pub fn is_enabled(&self) -> bool {
+    pub const fn is_enabled(self) -> bool {
         match self {
             Self::Enabled => true,
             Self::Disabled => false,
@@ -17,17 +17,23 @@ impl ModState {
 }
 impl From<bool> for ModState {
     fn from(v: bool) -> Self {
-        match v {
-            true => Self::Enabled,
-            false => Self::Disabled,
+        if v {
+            Self::Enabled
+        } else {
+            Self::Disabled
         }
+    }
+}
+impl From<ModState> for bool {
+    fn from(ms: ModState) -> Self {
+        ms.is_enabled()
     }
 }
 impl Display for ModState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            ModState::Enabled => f.write_str("Enabled"),
-            ModState::Disabled => f.write_str("Disabled"),
+            Self::Enabled => f.write_str("Enabled"),
+            Self::Disabled => f.write_str("Disabled"),
         }
     }
 }

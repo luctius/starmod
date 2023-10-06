@@ -1,4 +1,3 @@
-use anyhow::Result;
 use camino::Utf8Path;
 use serde::{Deserialize, Serialize};
 
@@ -16,13 +15,13 @@ impl DataManifest {
             disabled_files,
         }
     }
-    pub fn files(&self, _cache_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
-        Ok(self.files.clone())
+    pub fn files(&self, _cache_dir: &Utf8Path) -> Vec<InstallFile> {
+        self.files.clone()
     }
     pub fn disabled_files(&self) -> Vec<InstallFile> {
         self.disabled_files.clone()
     }
-    pub fn disable_file(&mut self, name: &str) -> Result<bool> {
+    pub fn disable_file(&mut self, name: &str) -> bool {
         if let Some((idx, _isf)) = self.files.iter().enumerate().find(|(_, isf)| {
             if isf.source().to_string().eq(name) {
                 true
@@ -31,9 +30,9 @@ impl DataManifest {
             }
         }) {
             self.disabled_files.push(self.files.remove(idx));
-            Ok(true)
+            true
         } else {
-            Ok(false)
+            false
         }
     }
 }

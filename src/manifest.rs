@@ -27,6 +27,8 @@ use mod_state::ModState;
 
 use self::{data::DataManifest, loader::LoaderManifest};
 
+pub const MANIFEST_EXTENSION: &str = "ron";
+
 #[derive(Clone, Debug, Deserialize, Serialize)]
 enum ManifestInternal {
     Data(data::DataManifest),
@@ -42,14 +44,14 @@ impl ManifestInternal {
     ) -> Self {
         match mod_kind {
             ModKind::FoMod | ModKind::Data => Self::Data(DataManifest::new(files, disabled_files)),
-            ModKind::Loader => Self::Loader(LoaderManifest::new(files)),
+            ModKind::Loader => Self::Loader(LoaderManifest::new(&files)),
             ModKind::Custom => Self::Custom(custom::CustomManifest::new(manifest_dir)),
         }
     }
     pub fn files(&self, cache_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
         match self {
-            Self::Data(d) => d.files(cache_dir),
-            Self::Loader(l) => l.files(cache_dir),
+            Self::Data(d) => Ok(d.files(cache_dir)),
+            Self::Loader(l) => Ok(l.files(cache_dir)),
             Self::Custom(c) => c.files(cache_dir),
         }
     }
@@ -71,31 +73,29 @@ impl ManifestInternal {
         for f in &files {
             let origin = f.source();
             let origin = manifest_dir.to_path_buf().join(origin);
-            origin_files.push(origin)
+            origin_files.push(origin);
         }
         Ok(origin_files)
     }
-    pub fn disabled_files(&self) -> Result<Vec<InstallFile>> {
+    pub fn disabled_files(&self) -> Vec<InstallFile> {
         match self {
-            Self::Data(d) => Ok(d.disabled_files()),
+            Self::Data(d) => d.disabled_files(),
 
             //TODO: does it make sense disabling files in these?
-            Self::Loader(_l) => Ok(vec![]),
-            Self::Custom(_c) => Ok(vec![]),
+            Self::Loader(_l) => vec![],
+            Self::Custom(_c) => vec![],
         }
     }
-    pub fn disable_file(&mut self, name: &str) -> Result<bool> {
+    pub fn disable_file(&mut self, name: &str) -> bool {
         match self {
             Self::Data(d) => d.disable_file(name),
 
             //TODO: does it make sense disabling files in these?
-            Self::Loader(_l) => Ok(false),
-            Self::Custom(_c) => Ok(false),
+            Self::Loader(_l) => false,
+            Self::Custom(_c) => false,
         }
     }
 }
-
-pub const MANIFEST_EXTENSION: &'static str = "ron";
 
 //TODO more info about the mod, description, authors, version, etc
 
@@ -177,7 +177,7 @@ impl Manifest {
         remove_file(dmodman_file)?;
         Ok(())
     }
-    pub fn is_valid(&self) -> bool {
+    pub const fn is_valid(&self) -> bool {
         //TODO: checks to validate the manifest file
         true
     }
@@ -202,13 +202,13 @@ impl Manifest {
         self.mod_state = ModState::Disabled;
         self.write()
     }
-    pub fn nexus_id(&self) -> Option<u32> {
+    pub const fn nexus_id(&self) -> Option<u32> {
         self.nexus_id
     }
     pub fn version(&self) -> Option<&str> {
         self.version.as_deref()
     }
-    pub fn mod_state(&self) -> ModState {
+    pub const fn mod_state(&self) -> ModState {
         self.mod_state
     }
     pub fn files(&self) -> Result<Vec<InstallFile>> {
@@ -227,14 +227,14 @@ impl Manifest {
                         enlisted_files.push(InstallFile::new_raw(
                             self.manifest_dir().join(f.source()),
                             f.destination().to_owned(),
-                        ))
+                        ));
                     }
                 }
             } else {
                 enlisted_files.push(InstallFile::new_raw(
                     self.manifest_dir().join(f.source()),
                     f.destination().to_owned(),
-                ))
+                ));
             }
         }
 
@@ -247,23 +247,22 @@ impl Manifest {
         self.internal
             .origin_files(&self.cache_dir, &self.manifest_dir)
     }
-    pub fn disabled_files(&self) -> Result<Vec<InstallFile>> {
+    pub fn disabled_files(&self) -> Vec<InstallFile> {
         self.internal.disabled_files()
     }
-    pub fn disable_file(&mut self, name: &str) -> Result<bool> {
+    pub fn disable_file(&mut self, name: &str) -> bool {
         self.internal.disable_file(name)
     }
-    pub fn priority(&self) -> isize {
+    pub const fn priority(&self) -> isize {
         self.priority
     }
     pub fn find_config_files(&self, extension: Option<&str>) -> Result<Vec<Utf8PathBuf>> {
         let mut config_files = Vec::new();
 
-        let ext_vec = if let Some(ext) = extension {
-            vec![ext]
-        } else {
-            vec!["ini", "json", "yaml", "xml", "config", "toml"]
-        };
+        let ext_vec = extension.map_or_else(
+            || vec!["ini", "json", "yaml", "xml", "config", "toml"],
+            |ext| vec![ext],
+        );
 
         for f in self.origin_files()? {
             if let Some(file_ext) = f.extension() {
@@ -276,14 +275,14 @@ impl Manifest {
         }
         Ok(config_files)
     }
-    pub fn is_enabled(&self) -> bool {
+    pub const fn is_enabled(&self) -> bool {
         self.mod_state().is_enabled()
     }
-    #[allow(unused)]
-    pub fn is_disabled(&self) -> bool {
-        !self.mod_state().is_enabled()
-    }
-    pub fn kind(&self) -> ModKind {
+    // #[allow(unused)]
+    // pub const fn is_disabled(&self) -> bool {
+    //     !self.mod_state().is_enabled()
+    // }
+    pub const fn kind(&self) -> ModKind {
         self.mod_kind
     }
     pub fn is_an_update(&self, dmodman: &DmodMan) -> bool {
@@ -296,11 +295,11 @@ impl Manifest {
     }
     pub fn add_tag(&mut self, tag: &str) -> Result<bool> {
         let tag = tag.to_lowercase();
-        if !self.tags.contains(&tag) {
-            self.tags.push(tag);
-            self.write().map(|_| true)
-        } else {
+        if self.tags.contains(&tag) {
             Ok(false)
+        } else {
+            self.tags.push(tag);
+            self.write().map(|()| true)
         }
     }
     pub fn remove_tag(&mut self, tag: &str) -> Result<bool> {
@@ -314,7 +313,7 @@ impl Manifest {
             .map(|(idx, _)| idx)
         {
             self.tags.swap_remove(idx);
-            self.write().map(|_| true)
+            self.write().map(|()| true)
         } else {
             Ok(true)
         }
@@ -329,7 +328,7 @@ impl<'a> TryFrom<&'a Utf8Path> for Manifest {
         let mut contents = String::new();
         buf_reader.read_to_string(&mut contents)?;
 
-        let mut manifest: Manifest = ron::from_str(&contents)?;
+        let mut manifest: Self = ron::from_str(&contents)?;
         manifest.cache_dir = file_path.parent().unwrap().to_path_buf();
 
         log::trace!("Opening manifest: {}", manifest.name());

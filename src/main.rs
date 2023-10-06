@@ -64,6 +64,7 @@ pub enum AppLet {
     // MorMod(AppLetArgs),
 }
 impl AppLet {
+    #[must_use]
     pub fn unwrap(self) -> (Game, AppLetArgs) {
         match self {
             /*Self::MorMod(a) | Self::ObMod(a) | Self::SkyMod(a) |*/
@@ -122,7 +123,7 @@ pub fn main() -> Result<()> {
         return Ok(());
     }
 
-    let mut settings = Settings::read_config(game, args.verbose)?;
+    let settings = Settings::read_config(game, args.verbose)?;
 
     let _logger = Logger::try_with_env_or_str("trace")?
         .log_to_file(FileSpec::try_from(settings.log_file())?)
@@ -150,14 +151,12 @@ pub fn main() -> Result<()> {
     }
 
     // Only allow create-config to be run when no valid settings are found
-    if !settings.valid_config() {
-        if let Some(cmd @ Subcommands::Config { .. }) = args.command {
-            cmd.execute(&mut settings)?;
-        } else {
-            return Err(SettingErrors::ConfigNotFound(settings.cmd_name().to_owned()).into());
-        }
+    if settings.valid_config() {
+        args.command.unwrap_or_default().execute(&settings)?;
+    } else if let Some(cmd @ Subcommands::Config { .. }) = args.command {
+        cmd.execute(&settings)?;
     } else {
-        args.command.unwrap_or_default().execute(&mut settings)?;
+        return Err(SettingErrors::ConfigNotFound(settings.cmd_name().to_owned()).into());
     }
 
     Ok(())

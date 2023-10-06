@@ -1,5 +1,3 @@
-use std::ffi::OsString;
-
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 
@@ -31,7 +29,7 @@ pub fn create_data_manifest(
     for entry in walker {
         let entry = entry?;
         let entry_path = entry.path();
-        if entry_path.is_dir() && entry.path().file_name().unwrap() == OsString::from("data") {
+        if entry_path.is_dir() && entry.path().file_name().unwrap() == "data" {
             if data_path.is_none() {
                 let entry_path = entry_path.to_path_buf();
                 data_path = Some(entry_path.strip_prefix(&manifest_dir)?.to_path_buf());
@@ -52,7 +50,7 @@ pub fn create_data_manifest(
         for entry in walker {
             let entry = entry?;
             let entry_path = entry.path();
-            if entry_path.is_dir() && entry.path().file_name().unwrap() == OsString::from("data") {
+            if entry_path.is_dir() && entry.path().file_name().unwrap() == "data" {
                 if data_path.is_none() {
                     data_path = Some(
                         entry_path
@@ -95,10 +93,10 @@ pub fn create_data_manifest(
             let destination = source.to_string();
             let destination = destination
                 .strip_prefix(data_path.as_str())
-                .map(|d| d.to_owned())
+                .map(std::borrow::ToOwned::to_owned)
                 .unwrap_or(destination);
 
-            files.push(InstallFile::new(source.into(), destination));
+            files.push(InstallFile::new(source, &destination));
         }
     }
 

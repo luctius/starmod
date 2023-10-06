@@ -32,12 +32,12 @@ pub enum ListCmd {
     Tag,
 }
 impl ListCmd {
-    pub fn execute(self, settings: &mut Settings) -> Result<()> {
+    pub fn execute(self, settings: &Settings) -> Result<()> {
         match self {
             Self::ModList => list_mods(settings),
-            Self::Conflicts => list_conflicts(&settings.cache_dir()),
-            Self::Files => list_files(&settings.cache_dir()),
-            Self::DisabledFiles => list_disabled_files(&settings.cache_dir()),
+            Self::Conflicts => list_conflicts(settings.cache_dir()),
+            Self::Files => list_files(settings.cache_dir()),
+            Self::DisabledFiles => list_disabled_files(settings.cache_dir()),
             Self::Tag => todo!(),
         }
     }
@@ -56,12 +56,10 @@ pub fn list_mods(settings: &Settings) -> Result<()> {
     for (idx, md) in mod_list.iter().enumerate() {
         let is_loser = conflict_list
             .get(&md.name().to_string())
-            .map(|c| !c.losing_to().is_empty())
-            .unwrap_or(false);
+            .is_some_and(|c| !c.losing_to().is_empty());
         let is_winner = conflict_list
             .get(&md.name().to_string())
-            .map(|c| !c.winning_over().is_empty())
-            .unwrap_or(false);
+            .is_some_and(|c| !c.winning_over().is_empty());
 
         let tag = Tag::from((is_loser, is_winner));
 
@@ -82,10 +80,10 @@ pub fn list_mods(settings: &Settings) -> Result<()> {
                 }
             }
 
-            if !file_not_lost {
-                Tag::CompleteLoser
-            } else {
+            if file_not_lost {
                 tag
+            } else {
+                Tag::CompleteLoser
             }
         } else {
             tag
@@ -111,8 +109,7 @@ pub fn list_mods(settings: &Settings) -> Result<()> {
             Cell::new(md.version().unwrap_or("<Unknown>").to_string()).fg(color),
             Cell::new(
                 md.nexus_id()
-                    .map(|nid| nid.to_string())
-                    .unwrap_or("<Unknown>".to_owned()),
+                    .map_or("<Unknown>".to_owned(), |nid| nid.to_string()),
             )
             .fg(color),
             Cell::new(md.kind().to_string()).fg(color),
@@ -161,9 +158,8 @@ pub fn list_conflicts(cache_dir: &Utf8Path) -> Result<()> {
     let mut table = create_table(vec!["File", "Mod"]);
 
     for (isf, (name, _priority)) in files {
-        let mut color = Color::White;
-        if conflict_list_file.contains_key(&isf.destination().to_string()) {
-            color = if conflict_list_file
+        let color = if conflict_list_file.contains_key(&isf.destination().to_string()) {
+            if conflict_list_file
                 .get(&isf.destination().to_string())
                 .unwrap()
                 .last()
@@ -173,8 +169,10 @@ pub fn list_conflicts(cache_dir: &Utf8Path) -> Result<()> {
                 Color::Green
             } else {
                 Color::Red
-            };
-        }
+            }
+        } else {
+            Color::White
+        };
 
         table.add_row(vec![
             Cell::new(isf.destination().to_string()).fg(color),
@@ -219,9 +217,8 @@ pub fn list_files(cache_dir: &Utf8Path) -> Result<()> {
     let mut table = create_table(vec!["File", "Destination", "Mod"]);
 
     for (isf, (name, _priority)) in files {
-        let mut color = Color::White;
-        if conflict_list_file.contains_key(&isf.destination().to_string()) {
-            color = if conflict_list_file
+        let color = if conflict_list_file.contains_key(&isf.destination().to_string()) {
+            if conflict_list_file
                 .get(&isf.destination().to_string())
                 .unwrap()
                 .last()
@@ -231,8 +228,10 @@ pub fn list_files(cache_dir: &Utf8Path) -> Result<()> {
                 Color::Green
             } else {
                 Color::Red
-            };
-        }
+            }
+        } else {
+            Color::White
+        };
 
         table.add_row(vec![
             Cell::new(isf.source().to_string()).fg(color),
@@ -253,7 +252,7 @@ pub fn list_disabled_files(cache_dir: &Utf8Path) -> Result<()> {
     let mut disabled_files = Vec::new();
 
     for m in mod_list {
-        for f in m.disabled_files()? {
+        for f in m.disabled_files() {
             disabled_files.push((f, m.name().to_string()));
         }
     }

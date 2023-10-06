@@ -82,23 +82,24 @@ pub enum Subcommands {
     },
 }
 impl Subcommands {
-    pub fn execute(self, settings: &mut Settings) -> Result<()> {
+    pub fn execute(self, settings: &Settings) -> Result<()> {
         //General TODO: Be more consistant in errors, error messages warnings etc.
 
         match self {
-            Subcommands::Config { cmd } => ConfigCmd::execute(cmd.unwrap_or_default(), settings),
-            Subcommands::List { cmd } => ListCmd::execute(cmd.unwrap_or_default(), settings),
-            Subcommands::Mods { cmd } => ModCmd::execute(cmd.unwrap_or_default(), settings),
-            Subcommands::Downloads { cmd } => {
-                DownloadCmd::execute(cmd.unwrap_or_default(), settings)
+            Self::Config { cmd } => ConfigCmd::execute(cmd.unwrap_or_default(), settings),
+            Self::List { cmd } => ListCmd::execute(cmd.unwrap_or_default(), settings),
+            Self::Mods { cmd } => ModCmd::execute(cmd.unwrap_or_default(), settings),
+            Self::Downloads { cmd } => DownloadCmd::execute(cmd.unwrap_or_default(), settings),
+            Self::Run { cmd } => RunCmd::execute(cmd.unwrap_or_default(), settings),
+            Self::Game { cmd } => GameCmd::execute(cmd.unwrap_or_default(), settings),
+            Self::Purge { cmd } => PurgeCmd::execute(cmd, settings),
+            Self::Legenda => {
+                show_legenda();
+                Ok(())
             }
-            Subcommands::Run { cmd } => RunCmd::execute(cmd.unwrap_or_default(), settings),
-            Subcommands::Game { cmd } => GameCmd::execute(cmd.unwrap_or_default(), settings),
-            Subcommands::Purge { cmd } => PurgeCmd::execute(cmd, settings),
-            Subcommands::Legenda => show_legenda(),
 
             #[cfg(feature = "loadorder")]
-            Subcommands::Plugin { cmd } => PluginCmd::execute(cmd.unwrap_or_default(), settings),
+            Self::Plugin { cmd } => PluginCmd::execute(cmd.unwrap_or_default(), settings),
         }
     }
 }
@@ -110,7 +111,7 @@ impl Default for Subcommands {
     }
 }
 
-pub fn show_legenda() -> Result<()> {
+pub fn show_legenda() {
     let mut table = create_table(vec!["Tag", "Color", "Meaning"]);
 
     let tag = Tag::Enabled;
@@ -162,5 +163,4 @@ pub fn show_legenda() -> Result<()> {
     ]);
 
     log::info!("{table}");
-    Ok(())
 }

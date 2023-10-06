@@ -35,8 +35,6 @@ pub fn rename_recursive(path: &Utf8Path) -> Result<()> {
 
         if entry_path.is_dir() || entry_path.is_file() {
             lower_case(&entry_path)?;
-        } else {
-            continue;
         }
     }
 

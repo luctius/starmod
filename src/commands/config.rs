@@ -36,7 +36,7 @@ pub enum ConfigCmd {
     },
 }
 impl ConfigCmd {
-    pub fn execute(self, settings: &mut Settings) -> Result<()> {
+    pub fn execute(self, settings: &Settings) -> Result<()> {
         match self {
             Self::Show => {
                 log::info!("{}", &settings);

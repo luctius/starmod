@@ -8,8 +8,8 @@ pub mod loader;
 
 // These are existing directories in the Starfield game dir
 // Ensure we use the same casing to avoid multiple similar directories.
-pub const DATA_DIR_NAME: &'static str = "Data";
-pub const TEXTURES_DIR_NAME: &'static str = "Textures";
+pub const DATA_DIR_NAME: &str = "Data";
+pub const TEXTURES_DIR_NAME: &str = "Textures";
 
 #[derive(Error, Debug)]
 pub enum InstallerError {
@@ -42,7 +42,7 @@ pub mod stdin {
             if s.to_lowercase() == "e" || s.to_lowercase() == "exit" {
                 Ok(Self::Exit)
             } else {
-                Ok(Self::Digit(u8::from_str_radix(s, 10)?))
+                Ok(Self::Digit(s.parse::<u8>()?))
             }
         }
     }
@@ -69,7 +69,7 @@ pub mod stdin {
             if s.to_lowercase() == "d" || s.to_lowercase() == "done" {
                 Ok(Self::Done)
             } else {
-                Input::from_str(s).map(|i| Self::from(i))
+                Input::from_str(s).map(Self::from)
             }
         }
     }

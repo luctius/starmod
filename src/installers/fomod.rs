@@ -1,5 +1,5 @@
-pub const FOMOD_INFO_FILE: &'static str = "fomod/info.xml";
-pub const FOMOD_MODCONFIG_FILE: &'static str = "fomod/moduleconfig.xml";
+pub const FOMOD_INFO_FILE: &str = "fomod/info.xml";
+pub const FOMOD_MODCONFIG_FILE: &str = "fomod/moduleconfig.xml";
 
 use encoding_rs_io::DecodeReaderBytes;
 
@@ -73,14 +73,12 @@ pub fn create_fomod_manifest(
 
     //FIXME TODO Dependencies
 
-    files.extend(Vec::<InstallFile>::from(
-        config.required_install_files.to_own_vec(&archive_dir)?,
-    ));
+    files.extend(config.required_install_files.to_own_vec(&archive_dir)?);
 
     println!();
     println!();
 
-    println!("FoMod Installer for {}", name,);
+    println!("FoMod Installer for {name}");
 
     let mut condition_flags = HashSet::new();
 
@@ -111,7 +109,7 @@ pub fn create_fomod_manifest(
                 }
                 fomod::GroupType::SelectAll(plugins) => {
                     let plugins = plugins.vec_sorted();
-                    let choices: Vec<usize> = select_all(&name, &plugins)?;
+                    let choices: Vec<usize> = select_all(&name, &plugins);
                     files.extend(fetch_plugin_files(&choices, &plugins, &archive_dir)?);
                     condition_flags.extend(fetch_plugin_flags(&choices, &plugins));
                 }
@@ -142,9 +140,7 @@ pub fn create_fomod_manifest(
         };
 
         if has_deps {
-            files.extend(Vec::<InstallFile>::from(
-                cip.files.to_own_vec(&archive_dir)?,
-            ));
+            files.extend(cip.files.to_own_vec(&archive_dir)?);
         }
     }
 
@@ -171,23 +167,22 @@ impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
             match fte {
                 fomod::FileTypeEnum::File(f) => {
                     let mut f = f.clone();
-                    f.source = f.source.replace("\\", "/");
-                    f.destination = f.destination.map(|d| d.replace("\\", "/"));
+                    f.source = f.source.replace('\\', "/");
+                    f.destination = f.destination.map(|d| d.replace('\\', "/"));
 
-                    let destination = f.destination.clone().unwrap_or_else(|| String::new());
+                    let destination = f.destination.clone().unwrap_or_else(String::new);
                     let source = Utf8PathBuf::from(f.source.clone().to_lowercase());
 
-                    files.push(InstallFile::new(source, destination));
+                    files.push(InstallFile::new(source, &destination));
                 }
                 fomod::FileTypeEnum::Folder(f) => {
                     let mut f = f.clone();
-                    f.source = f.source.replace("\\", "/").to_lowercase();
-                    f.destination = f.destination.map(|d| d.replace("\\", "/"));
+                    f.source = f.source.replace('\\', "/").to_lowercase();
+                    f.destination = f.destination.map(|d| d.replace('\\', "/"));
                     f.destination = f
                         .destination
                         .as_deref()
-                        .map(|d| d.strip_prefix("data/").map(|d| d.to_lowercase()))
-                        .flatten()
+                        .and_then(|d| d.strip_prefix("data/").map(str::to_lowercase))
                         .or(f.destination);
 
                     let mut plugin_dir = archive_dir.to_path_buf();
@@ -206,16 +201,16 @@ impl FomodInstallVecExt for Vec<fomod::FileTypeEnum> {
 
                         if entry_path.is_file() {
                             let source = Utf8PathBuf::try_from(entry_path.to_path_buf())?
-                                .strip_prefix(&archive_dir)?
+                                .strip_prefix(archive_dir)?
                                 .to_path_buf();
 
                             let destination = format!(
                                 "{}/{}",
                                 f.destination.clone().unwrap_or_default(),
-                                source.strip_prefix(&f.source).unwrap().to_string()
+                                source.strip_prefix(&f.source).unwrap()
                             );
 
-                            files.push(InstallFile::new(source, destination));
+                            files.push(InstallFile::new(source, &destination));
                         }
                     }
                 }
@@ -262,25 +257,25 @@ fn select_all(
     // files: &mut Vec<InstallFile>,
     // condition_flags: &mut HashSet<FlagDependency>,
     // archive_dir: &Utf8Path,
-) -> Result<Vec<usize>> {
+) -> Vec<usize> {
     let mut choices = Vec::with_capacity(plugins.len());
     for (i, p) in plugins.iter().enumerate() {
         println!("{}", p.name);
         println!("{}", p.description);
-        choices.push(i)
+        choices.push(i);
     }
 
-    Ok(choices)
+    choices
 }
 
 fn select_exactly_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<usize>> {
-    println!("");
+    println!();
     println!("Please select one of the following: ");
     for (i, p) in plugins.iter().enumerate() {
         println!("{}) {}: {}", i, p.name, p.description);
     }
     println!("E) Exit Installer");
-    println!("");
+    println!();
 
     let choice: u8 = loop {
         let input: Input = prompt_until_ok("Select : ");
@@ -300,14 +295,14 @@ fn select_exactly_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<u
 }
 
 fn select_at_least_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<usize>> {
-    println!("");
+    println!();
     println!("Please select at-least one of the following: ");
     for (i, p) in plugins.iter().enumerate() {
         println!("{}) {}: {}", i, p.name, p.description);
     }
     println!("D) Done with the selection");
     println!("E) Exit Installer");
-    println!("");
+    println!();
 
     let mut selected = false;
     let mut choices = Vec::with_capacity(4);
@@ -330,9 +325,8 @@ fn select_at_least_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<
             InputWithDone::Done => {
                 if selected {
                     break;
-                } else {
-                    println!("Please select at-least one option.");
                 }
+                println!("Please select at-least one option.");
             }
         }
     }
@@ -341,14 +335,14 @@ fn select_at_least_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<
 }
 
 fn select_at_most_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<usize>> {
-    println!("");
+    println!();
     println!("Please select at-most one of the following: ");
     for (i, p) in plugins.iter().enumerate() {
         println!("{}) {}: {}", i, p.name, p.description);
     }
     println!("D) Done with the selection");
     println!("E) Exit Installer");
-    println!("");
+    println!();
 
     let choice: Option<u8> = loop {
         let input: InputWithDone = prompt_until_ok("Select : ");
@@ -357,9 +351,8 @@ fn select_at_most_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<u
                 Input::Digit(d) => {
                     if (d as usize) < plugins.len() {
                         break Some(d);
-                    } else {
-                        println!("Invalid choice..");
                     }
+                    println!("Invalid choice..");
                 }
                 Input::Exit => {
                     return Err(InstallerError::InstallerCancelled(mod_name.to_string()).into())
@@ -375,14 +368,14 @@ fn select_at_most_one(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<u
 }
 
 fn select_any(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<usize>> {
-    println!("");
+    println!();
     println!("Please select any of the following: ");
     for (i, p) in plugins.iter().enumerate() {
         println!("{}) {}: {}", i, p.name, p.description);
     }
     println!("D) Done with the selection");
     println!("E) Exit Installer");
-    println!("");
+    println!();
 
     let mut choices = Vec::with_capacity(4);
     loop {
@@ -392,7 +385,7 @@ fn select_any(mod_name: &str, plugins: &[fomod::Plugin]) -> Result<Vec<usize>> {
                 Input::Digit(d) => {
                     let d = usize::from(d);
                     if d < plugins.len() {
-                        choices.push(d)
+                        choices.push(d);
                     } else {
                         println!("Invalid choice..");
                     }

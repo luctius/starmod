@@ -37,7 +37,7 @@ pub fn create_custom_manifest(
 
             let destination = source.to_string().to_lowercase();
 
-            files.push(InstallFile::new(source.into(), destination));
+            files.push(InstallFile::new(source, &destination));
         }
     }
 

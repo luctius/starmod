@@ -9,7 +9,7 @@ use anyhow::{Error, Result};
 use serde::Deserialize;
 use xdg::BaseDirectories;
 
-pub const DMODMAN_EXTENSION: &'static str = "dmodman";
+pub const DMODMAN_EXTENSION: &str = "dmodman";
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct DmodMan {
@@ -22,7 +22,7 @@ pub struct DmodMan {
     update_status: UpdateStatus,
 }
 impl DmodMan {
-    pub fn gather_list(cache_dir: &Utf8Path) -> Result<Vec<DmodMan>> {
+    pub fn gather_list(cache_dir: &Utf8Path) -> Result<Vec<Self>> {
         let mut dmodman_list = Vec::new();
         let walker = WalkDir::new(cache_dir)
             .min_depth(1)
@@ -36,7 +36,7 @@ impl DmodMan {
             let entry_path = Utf8PathBuf::try_from(entry.path().to_path_buf())?;
 
             if entry_path.extension().unwrap_or_default() == "json" {
-                dmodman_list.push(DmodMan::try_from(entry_path.as_path())?);
+                dmodman_list.push(Self::try_from(entry_path.as_path())?);
             }
         }
 
@@ -52,7 +52,7 @@ impl DmodMan {
             .map(|(name, _rest)| name.to_owned())
             .unwrap()
     }
-    pub fn mod_id(&self) -> u32 {
+    pub const fn mod_id(&self) -> u32 {
         self.mod_id
     }
     #[allow(unused)]
@@ -61,11 +61,9 @@ impl DmodMan {
             .to_lowercase()
             .split_once(&format!("-{}-", self.mod_id))
             .map(|(_name, rest)| rest)
-            .map(|s| s.rsplit_once("."))
-            .flatten()
+            .and_then(|s| s.rsplit_once('.'))
             .map(|(rest, _ext)| rest)
-            .map(|s| s.rsplit_once("-"))
-            .flatten()
+            .and_then(|s| s.rsplit_once('-'))
             .map(|(_version, timestamp)| timestamp.to_owned())
     }
     pub fn version(&self) -> Option<String> {
@@ -73,13 +71,11 @@ impl DmodMan {
             .to_lowercase()
             .split_once(&format!("-{}-", self.mod_id))
             .map(|(_name, rest)| rest)
-            .map(|s| s.rsplit_once("."))
-            .flatten()
+            .and_then(|s| s.rsplit_once('.'))
             .map(|(rest, _ext)| rest)
-            .map(|s| s.rsplit_once("-"))
-            .flatten()
+            .and_then(|s| s.rsplit_once('-'))
             .map(|(version, _timestamp)| version)
-            .map(|s| s.replace("-", "."))
+            .map(|s| s.replace('-', "."))
     }
 }
 impl TryFrom<File> for DmodMan {
@@ -122,7 +118,7 @@ pub enum UpdateStatus {
 
 impl UpdateStatus {
     #[allow(unused)]
-    pub fn time(&self) -> u64 {
+    pub const fn time(&self) -> u64 {
         match self {
             Self::UpToDate(t)
             | Self::HasNewFile(t)
@@ -143,7 +139,7 @@ impl DModManConfig {
     pub fn read() -> Option<Self> {
         let path = Self::path().ok()?;
         let mut contents = String::new();
-        let mut f = File::open(&path).ok()?;
+        let mut f = File::open(path).ok()?;
         f.read_to_string(&mut contents).ok()?;
         toml::from_str(&contents).ok()
     }
@@ -152,7 +148,7 @@ impl DModManConfig {
         let mut ddir = Utf8PathBuf::from(ddir);
 
         if let Some(profile) = self.profile.as_deref() {
-            ddir.push(profile)
+            ddir.push(profile);
         }
         Some(ddir)
     }

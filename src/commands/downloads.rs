@@ -48,7 +48,7 @@ pub enum DownloadCmd {
     UpgradeAll,
 }
 impl DownloadCmd {
-    pub fn execute(self, settings: &mut Settings) -> Result<()> {
+    pub fn execute(self, settings: &Settings) -> Result<()> {
         match self {
             Self::List => list_downloaded_files(settings.download_dir(), settings.cache_dir()),
             Self::Extract { name } => {
@@ -71,21 +71,20 @@ impl DownloadCmd {
 
                     let mod_type = ModKind::detect_mod_type(
                         settings.cache_dir(),
-                        &mod_list[idx].manifest_dir(),
+                        mod_list[idx].manifest_dir(),
                     )?;
-                    mod_type.create_mod(settings.cache_dir(), &mod_list[idx].manifest_dir())?;
+                    mod_type.create_mod(settings.cache_dir(), mod_list[idx].manifest_dir())?;
                 } else {
-                    log::warn!("Mod '{name}' not found.")
+                    log::warn!("Mod '{name}' not found.");
                 }
                 Ok(())
             }
             Self::UpgradeAll => {
                 let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
-                let dmodman_list = HashMap::<_, _>::from_iter(
-                    dmodman_list
-                        .iter()
-                        .map(|dm| ((dm.name(), dm.mod_id()), dm.clone())),
-                );
+                let dmodman_list = dmodman_list
+                    .iter()
+                    .map(|dm| ((dm.name(), dm.mod_id()), dm.clone()))
+                    .collect::<HashMap<_, _>>();
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 mod_list.retain(|md| {
                     dmodman_list
@@ -93,8 +92,7 @@ impl DownloadCmd {
                             md.bare_file_name().to_string(),
                             md.nexus_id().unwrap_or_default(),
                         ))
-                        .map(|dmod| md.is_an_update(dmod))
-                        .unwrap_or(false)
+                        .is_some_and(|dmod| md.is_an_update(dmod))
                 });
 
                 for md in mod_list {
@@ -105,7 +103,7 @@ impl DownloadCmd {
                             md.bare_file_name().to_string(),
                             md.nexus_id().unwrap_or_default(),
                         ))
-                        .map(|dmod| dmod.file_name())
+                        .map(DmodMan::file_name)
                         .unwrap_or_default();
                     log::info!("Updating '{name}'");
                     md.remove()?;
@@ -131,17 +129,19 @@ impl DownloadCmd {
 pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
     let sf = downloaded_files(download_dir)?;
     let mod_list = Vec::gather_mods(cache_dir)?;
-    let mod_list =
-        HashMap::<_, _>::from_iter(mod_list.iter().map(|m| (m.bare_file_name().to_string(), m)));
+    let mod_list = mod_list
+        .iter()
+        .map(|m| (m.bare_file_name().to_string(), m))
+        .collect::<HashMap<_, _>>();
 
     let mut table = create_table(vec!["Archive", "Status"]);
 
     for (_, f) in sf {
         let dmodman = DmodMan::try_from(download_dir.join(&f).add_extension("json")).ok();
-        let archive = dmodman
-            .as_ref()
-            .map(|dmod| dmod.name())
-            .unwrap_or_else(|| f.with_extension("").as_str().to_lowercase());
+        let archive = dmodman.as_ref().map_or_else(
+            || f.with_extension("").as_str().to_lowercase(),
+            DmodMan::name,
+        );
         let manifest = mod_list.get(&archive);
 
         log::trace!("testing {} against {}.", f.as_str(), archive);
@@ -151,8 +151,7 @@ pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> R
             manifest.is_some(),
             // is an upgrade
             dmodman
-                .map(|dmod| manifest.map(|m| m.is_an_update(&dmod)))
-                .flatten()
+                .and_then(|dmod| manifest.map(|m| m.is_an_update(&dmod)))
                 .unwrap_or(false),
         ) {
             (true, false) => ("Installed", Color::Grey),
@@ -177,12 +176,10 @@ pub fn downloaded_files(download_dir: &Utf8Path) -> Result<Vec<(SupportedArchive
     // TODO check for a dmodman file
     // and check for the game in that file
 
-    for path in paths {
-        if let Ok(path) = path {
-            if let Ok(typ) = SupportedArchives::from_path(&path.path()) {
-                let path = Utf8PathBuf::try_from(path.file_name().to_str().unwrap_or_default())?;
-                supported_files.push((typ, path));
-            }
+    for path in paths.flatten() {
+        if let Ok(typ) = SupportedArchives::from_path(&path.path()) {
+            let path = Utf8PathBuf::try_from(path.file_name().to_str().unwrap_or_default())?;
+            supported_files.push((typ, path));
         }
     }
 
@@ -190,6 +187,8 @@ pub fn downloaded_files(download_dir: &Utf8Path) -> Result<Vec<(SupportedArchive
 }
 
 pub fn extract_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
+    use rayon::prelude::*;
+
     let sf = downloaded_files(download_dir)?;
     let extracted_files = Vec::with_capacity(sf.len());
     let extracted_files = Arc::new(Mutex::new(extracted_files));
@@ -204,7 +203,7 @@ pub fn extract_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -
         let p = ProgressBar::new(1).with_style(sty.clone());
         multi.add(p.clone());
         progress_bars.push(p.clone());
-        p.set_message(format!("Extracting: {}", f));
+        p.set_message(format!("Extracting: {f}"));
     }
     let progress_bars = Arc::new(progress_bars);
 
@@ -219,15 +218,14 @@ pub fn extract_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -
                 thread::sleep(Duration::from_millis(70));
             }
         });
-        use rayon::prelude::*;
 
         sf.par_iter().enumerate().try_for_each(|(idx, (typ, f))| {
             if extract_downloaded_file(download_dir, cache_dir, *typ, f)? {
                 extracted_files.lock().unwrap().push(f.as_path());
                 progress_bars[idx].inc(1);
-                progress_bars[idx].finish_with_message(format!("Extracting: {} ... => Done.", f));
+                progress_bars[idx].finish_with_message(format!("Extracting: {f} ... => Done."));
             } else {
-                progress_bars[idx].finish_with_message(format!("Skipped: {} ... => Done.", f));
+                progress_bars[idx].finish_with_message(format!("Skipped: {f} ... => Done."));
             }
             Ok::<(), anyhow::Error>(())
         })?;
@@ -236,8 +234,9 @@ pub fn extract_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -
         Ok::<(), anyhow::Error>(())
     })?;
 
-    for name in extracted_files.lock().unwrap().iter() {
-        install_downloaded_file(&cache_dir, name)?;
+    let extracted_files = extracted_files.lock().unwrap();
+    for name in extracted_files.iter() {
+        install_downloaded_file(cache_dir, name)?;
     }
 
     Ok(())
@@ -249,15 +248,15 @@ pub fn find_and_extract_archive(
     name: &str,
 ) -> Result<Option<Manifest>> {
     let sf = downloaded_files(download_dir)?;
-    if let Some((sa, f)) = find_archive_by_name(&sf, &name) {
+    if let Some((sa, f)) = find_archive_by_name(&sf, name) {
         if extract_downloaded_file(download_dir, cache_dir, sa, f.as_path())? {
-            install_downloaded_file(&cache_dir, &f).map(|md| Some(md))
+            install_downloaded_file(cache_dir, &f).map(Some)
         } else {
             Ok(None)
         }
-    } else if let Some((sa, f)) = find_mod_by_name_fuzzy(&sf, &name) {
+    } else if let Some((sa, f)) = find_mod_by_name_fuzzy(&sf, name) {
         if extract_downloaded_file(download_dir, cache_dir, sa, f.as_path())? {
-            install_downloaded_file(&cache_dir, &f).map(|md| Some(md))
+            install_downloaded_file(cache_dir, &f).map(Some)
         } else {
             Ok(None)
         }
@@ -332,8 +331,8 @@ fn extract_downloaded_file(
 
 fn install_downloaded_file(cache_dir: &Utf8Path, file: &Utf8Path) -> Result<Manifest> {
     let file = Utf8PathBuf::from(file.as_str().to_lowercase()).with_extension("");
-    let mod_kind = ModKind::detect_mod_type(&cache_dir, &file)?;
-    mod_kind.create_mod(&cache_dir, &file)
+    let mod_kind = ModKind::detect_mod_type(cache_dir, &file)?;
+    mod_kind.create_mod(cache_dir, &file)
 }
 
 pub fn find_archive_by_name(
@@ -342,7 +341,7 @@ pub fn find_archive_by_name(
 ) -> Option<(SupportedArchives, Utf8PathBuf)> {
     archive_list
         .iter()
-        .find_map(|(archive_type, f)| (f == name).then(|| (archive_type.clone(), f.clone())))
+        .find_map(|(archive_type, f)| (f == name).then(|| (*archive_type, f.clone())))
 }
 pub fn find_mod_by_name_fuzzy(
     archive_list: &[(SupportedArchives, Utf8PathBuf)],
@@ -351,14 +350,12 @@ pub fn find_mod_by_name_fuzzy(
     let matcher = SkimMatcherV2::default();
     let mut match_vec = Vec::new();
 
-    archive_list.iter().for_each(|(st, f)| {
-        let i = matcher.fuzzy_match(f.as_str(), &fuzzy_name).unwrap_or(0);
+    for (st, f) in archive_list {
+        let i = matcher.fuzzy_match(f.as_str(), fuzzy_name).unwrap_or(0);
         match_vec.push((st, f, i));
-    });
+    }
 
     match_vec.sort_unstable_by(|(_, _, ia), (_, _, ib)| ia.cmp(ib));
 
-    match_vec
-        .last()
-        .map(|(sa, f, _)| ((*sa).clone(), (*f).clone()))
+    match_vec.last().map(|(sa, f, _)| (*(*sa), (*f).clone()))
 }

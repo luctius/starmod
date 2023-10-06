@@ -17,9 +17,10 @@ use log::LevelFilter;
 
 use crate::{commands::game::RunCmd, dmodman::DModManConfig, game::Game};
 
-const CONFIG_EXTENTION: &'static str = "ron";
-const EDITOR_ENV: &'static str = "EDITOR";
+const CONFIG_EXTENTION: &str = "ron";
+const EDITOR_ENV: &str = "EDITOR";
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Error, Debug)]
 pub enum SettingErrors {
     #[error("No valid config file could be found; Please run '{0} update-config' first.")]
@@ -58,10 +59,10 @@ pub enum RunCmdKind {
 impl From<RunCmdKind> for RunCmd {
     fn from(kind: RunCmdKind) -> Self {
         match kind {
-            RunCmdKind::Game => RunCmd::Game,
-            RunCmdKind::Loader => RunCmd::Loader,
-            RunCmdKind::Loot => RunCmd::Loot,
-            RunCmdKind::XEdit => RunCmd::XEdit,
+            RunCmdKind::Game => Self::Game,
+            RunCmdKind::Loader => Self::Loader,
+            RunCmdKind::Loot => Self::Loot,
+            RunCmdKind::XEdit => Self::XEdit,
         }
     }
 }
@@ -98,9 +99,7 @@ impl From<LogLevel> for Duplicate {
     fn from(ll: LogLevel) -> Self {
         // Note: never log less than info, is make the application useless
         match ll {
-            LogLevel::Error => Self::Info,
-            LogLevel::Warn => Self::Info,
-            LogLevel::Info => Self::Info,
+            LogLevel::Error | LogLevel::Warn | LogLevel::Info => Self::Info,
             LogLevel::Debug => Self::Debug,
             LogLevel::Trace => Self::Trace,
         }
@@ -134,24 +133,23 @@ impl Settings {
 
         let config_file = Utf8PathBuf::from(name).with_extension(CONFIG_EXTENTION);
 
-        let xdg_base = BaseDirectories::with_prefix(&name)?;
+        let xdg_base = BaseDirectories::with_prefix(name)?;
         let config_path = Utf8PathBuf::try_from(
             xdg_base
                 .place_config_file(config_file)
-                .with_context(|| format!("Cannot create configuration directory for {}", name))?,
+                .with_context(|| format!("Cannot create configuration directory for {name}"))?,
         )?;
-        let log_path = Utf8PathBuf::try_from(config_path.with_extension("log"))?;
+        let log_path = config_path.with_extension("log");
 
-        let download_dir = DModManConfig::read().map(|dc| dc.download_dir()).flatten();
+        let download_dir = DModManConfig::read().and_then(|dc| dc.download_dir());
         let download_dir = download_dir
             .or_else(|| dirs::download_dir().map(|d| Utf8PathBuf::try_from(d).unwrap()))
             .unwrap_or_default();
-        let download_dir = Utf8PathBuf::try_from(download_dir)?;
 
         let cache_dir =
             Utf8PathBuf::try_from(xdg_base.create_cache_directory("").unwrap_or_default())?;
 
-        let editor = env::vars().find_map(|(key, val)| (key == EDITOR_ENV).then(|| val));
+        let editor = env::vars().find_map(|(key, val)| (key == EDITOR_ENV).then_some(val));
 
         let loot = LootType::FlatPack;
         let proton_dir = None;
@@ -161,23 +159,23 @@ impl Settings {
             d.push(".steam/steam");
             d
         });
-        let steam_dir = if let Some(steam_dir) = steam_dir {
-            if steam_dir.exists() {
-                Some(steam_dir)
-            } else {
-                None
-            }
-        } else {
-            None
-        }
-        .map(|sd| Utf8PathBuf::try_from(sd).unwrap());
+
+        let steam_dir = steam_dir
+            .and_then(|steam_dir| {
+                if steam_dir.exists() {
+                    Some(steam_dir)
+                } else {
+                    None
+                }
+            })
+            .map(|sd| Utf8PathBuf::try_from(sd).unwrap());
 
         let default_run = None;
 
         let loot_data_dir = Utf8PathBuf::try_from(
             xdg_base
                 .create_config_directory("loot")
-                .with_context(|| format!("Cannot create configuration directory for {}", name))?,
+                .with_context(|| format!("Cannot create configuration directory for {name}"))?,
         )?;
 
         Ok(Self {
@@ -208,10 +206,10 @@ impl Settings {
             && self.game_dir.exists()
             && self.game_dir.is_dir()
     }
-    pub fn game(&self) -> &Game {
+    pub const fn game(&self) -> &Game {
         &self.game
     }
-    pub fn cmd_name(&self) -> &str {
+    pub const fn cmd_name(&self) -> &str {
         self.game.mod_manager_name()
     }
     #[allow(unused)]
@@ -239,7 +237,7 @@ impl Settings {
     pub fn steam_dir(&self) -> Option<&Utf8Path> {
         self.steam_dir.as_deref()
     }
-    pub fn loot(&self) -> &LootType {
+    pub const fn loot(&self) -> &LootType {
         &self.loot
     }
     pub fn loot_data_dir(&self) -> &Utf8Path {
@@ -248,11 +246,11 @@ impl Settings {
     pub fn xedit_dir(&self) -> Option<&Utf8Path> {
         self.xedit_dir.as_deref()
     }
-    pub fn default_run(&self) -> Option<RunCmdKind> {
+    pub const fn default_run(&self) -> Option<RunCmdKind> {
         self.default_run
     }
     pub fn editor(&self) -> String {
-        self.editor.clone().unwrap_or("xdg-open".to_owned())
+        self.editor.clone().unwrap_or_else(|| "xdg-open".to_owned())
     }
     pub fn read_config(game: Game, verbosity: LogLevel) -> Result<Self> {
         let settings = Self::create(game, verbosity)?;
@@ -266,6 +264,7 @@ impl Settings {
         }
     }
     //TODO option to fetch download dir from dmodman's config
+    #[allow(clippy::too_many_arguments)]
     pub fn create_config(
         &self,
         download_dir: Option<Utf8PathBuf>,
@@ -288,7 +287,7 @@ impl Settings {
         let game_dir = if game_dir.exists() {
             game_dir
         } else {
-            self.game.find_game().unwrap_or(game_dir)
+            Game::find_game().unwrap_or(game_dir)
         };
 
         cache_dir
@@ -332,7 +331,7 @@ impl Settings {
         println!("Removing file: {}", self.config_path);
         std::fs::remove_file(&self.config_path)?;
         if let Some(parent) = self.config_path.parent() {
-            println!("Removing directory: {}", parent);
+            println!("Removing directory: {parent}");
             std::fs::remove_dir(parent)?;
         }
         Ok(())
@@ -379,8 +378,7 @@ impl Display for Settings {
                     "{}",
                     self.proton_dir
                         .as_ref()
-                        .map(|d| d.to_string())
-                        .unwrap_or("<Unknown>".to_owned())
+                        .map_or_else(|| "<Unknown>".to_owned(), ToString::to_string)
                 ),
             ])
             .add_row(vec![
@@ -389,16 +387,20 @@ impl Display for Settings {
                     "{}",
                     self.compat_dir
                         .as_ref()
-                        .map(|d| d.to_string())
-                        .unwrap_or("<Unknown>".to_owned())
+                        .map_or_else(|| "<Unknown>".to_owned(), ToString::to_string)
                 ),
             ])
             .add_row(vec![
                 "Editor".to_owned(),
-                format!("{}", self.editor.clone().unwrap_or("<Unknown>".to_owned())),
+                format!(
+                    "{}",
+                    self.editor
+                        .clone()
+                        .unwrap_or_else(|| "<Unknown>".to_owned())
+                ),
             ]);
 
-        write!(f, "{}", table)
+        write!(f, "{table}")
     }
 }
 

@@ -15,10 +15,7 @@ pub enum DecompressError {
 }
 fn path_result(path: &Path) -> String {
     let spath = path.to_str();
-    match spath {
-        Some(p) => String::from(p),
-        None => String::from("path missing!"),
-    }
+    spath.map_or_else(|| String::from("path missing!"), String::from)
 }
 
 #[derive(Copy, Clone, Debug)]
@@ -47,26 +44,26 @@ impl SupportedArchives {
             Err(DecompressError::Unsupported(path.to_path_buf()))?
         }
     }
-    pub fn decompress(&self, from_path: &Path, destination_path: &Path) -> Result<()> {
+    pub fn decompress(self, from_path: &Path, destination_path: &Path) -> Result<()> {
         match self {
-            SupportedArchives::SevenZip => decompress_7z(from_path, destination_path),
-            SupportedArchives::Zip => decompress_zip(from_path, destination_path).or_else(|e| {
+            Self::SevenZip => decompress_7z(from_path, destination_path),
+            Self::Zip => decompress_zip(from_path, destination_path).or_else(|e| {
                 decompress_zip_with_permission_override(from_path, destination_path).or(Err(e))
             }),
-            SupportedArchives::TarGz => decompress_tar_gz(from_path, destination_path),
-            SupportedArchives::TarXz => decompress_tar_xz(from_path, destination_path),
-            SupportedArchives::Rar => decompress_rar(from_path, destination_path),
+            Self::TarGz => decompress_tar_gz(from_path, destination_path),
+            Self::TarXz => decompress_tar_xz(from_path, destination_path),
+            Self::Rar => decompress_rar(from_path, destination_path),
         }
     }
 }
 impl Display for SupportedArchives {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let typ_str = match self {
-            SupportedArchives::SevenZip => "7zip",
-            SupportedArchives::Zip => "zip",
-            SupportedArchives::TarGz => "tar.gz",
-            SupportedArchives::TarXz => "tar.xz",
-            SupportedArchives::Rar => "rar",
+            Self::SevenZip => "7zip",
+            Self::Zip => "zip",
+            Self::TarGz => "tar.gz",
+            Self::TarXz => "tar.xz",
+            Self::Rar => "rar",
         };
         f.write_str(typ_str)
     }

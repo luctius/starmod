@@ -24,7 +24,7 @@ use crate::{
     utils::AddExtension,
 };
 
-const BACKUP_EXTENTION: &'static str = "starmod_bkp";
+const BACKUP_EXTENTION: &str = "starmod_bkp";
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub enum ModKind {
@@ -56,12 +56,12 @@ impl ModKind {
             let entry_path = entry.path();
 
             if let Ok(p) = entry_path.strip_prefix(&archive_dir) {
-                if p.to_string_lossy().to_string() == FOMOD_INFO_FILE {
+                if p.to_string_lossy() == FOMOD_INFO_FILE {
                     info = true;
                 }
             }
             if let Ok(p) = entry_path.strip_prefix(&archive_dir) {
-                if p.to_string_lossy().to_string() == FOMOD_MODCONFIG_FILE {
+                if p.to_string_lossy() == FOMOD_MODCONFIG_FILE {
                     config = true;
                 }
             }
@@ -122,26 +122,24 @@ impl GatherModList for Vec<Manifest> {
     fn gather_mods(cache_dir: &Utf8Path) -> Result<Vec<Manifest>> {
         let paths = fs::read_dir(cache_dir)?;
 
-        let mut mod_list = Vec::new();
+        let mut mod_list = Self::new();
 
-        for path in paths {
-            if let Ok(entry) = path {
-                if entry
-                    .path()
-                    .extension()
-                    .unwrap_or_default()
-                    .to_str()
-                    .unwrap_or_default()
-                    .eq(MANIFEST_EXTENSION)
-                {
-                    mod_list.push(Manifest::try_from(
-                        Utf8PathBuf::try_from(entry.path().to_path_buf())?.as_path(),
-                    )?);
-                }
+        for path in paths.flatten() {
+            if path
+                .path()
+                .extension()
+                .unwrap_or_default()
+                .to_str()
+                .unwrap_or_default()
+                .eq(MANIFEST_EXTENSION)
+            {
+                mod_list.push(Manifest::try_from(
+                    Utf8PathBuf::try_from(path.path().clone())?.as_path(),
+                )?);
             }
         }
 
-        mod_list.sort_by(|a, b| a.cmp(b));
+        mod_list.sort_by(Ord::cmp);
 
         Ok(mod_list)
     }
@@ -192,8 +190,8 @@ impl ModList for &mut [Manifest] {
         log::debug!("Installing Files");
         file_list.par_iter().try_for_each(|f| {
             // for f in file_list {
-            let origin = cache_dir.clone().join(f.source());
-            let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
+            let origin = cache_dir.join(f.source());
+            let destination = game_dir.join(Utf8PathBuf::from(f.destination()));
             log::trace!("starting with file: {} -> {}", origin, destination);
 
             let destination_base = destination.parent().unwrap().to_path_buf();
@@ -213,7 +211,7 @@ impl ModList for &mut [Manifest] {
             if destination.is_symlink() {
                 let target = Utf8PathBuf::try_from(read_link(&destination)?)?;
 
-                if target.starts_with(&cache_dir) {
+                if target.starts_with(cache_dir) {
                     remove_file(&destination)?;
                     log::debug!("overrule {} ({} > {})", destination, origin, target);
                 }
@@ -267,8 +265,8 @@ impl ModList for &mut [Manifest] {
 
         log::debug!("Start Removing files");
         file_list.par_iter().try_for_each(|f| {
-            let origin = cache_dir.clone().join(f.source());
-            let destination = game_dir.clone().join(Utf8PathBuf::from(f.destination()));
+            let origin = cache_dir.join(f.source());
+            let destination = game_dir.join(Utf8PathBuf::from(f.destination()));
 
             if destination.is_file()
                 && destination.is_symlink()
@@ -292,7 +290,7 @@ impl ModList for &mut [Manifest] {
         progress.finish_and_clear();
 
         log::debug!("Clean-up Game Dir");
-        let walker = WalkDir::new(&game_dir)
+        let walker = WalkDir::new(game_dir)
             .min_depth(1)
             .max_depth(usize::MAX)
             .follow_links(false)
@@ -304,25 +302,25 @@ impl ModList for &mut [Manifest] {
             let entry_path = entry.path();
 
             // Restore backupped files
-            if entry_path.is_file() {
-                if entry_path
+            if entry_path.is_file()
+                && entry_path
                     .extension()
                     .unwrap_or_default()
                     .to_str()
                     .unwrap_or_default()
                     == BACKUP_EXTENTION
-                {
-                    let new = entry_path.with_extension("");
-                    if !new.exists() {
-                        log::debug!(
-                            "Restoring Backup: {} -> {}.",
-                            &entry_path.display(),
-                            new.display()
-                        );
-                        rename(entry_path, new)?;
-                    }
+            {
+                let new = entry_path.with_extension("");
+                if !new.exists() {
+                    log::debug!(
+                        "Restoring Backup: {} -> {}.",
+                        &entry_path.display(),
+                        new.display()
+                    );
+                    rename(entry_path, new)?;
                 }
             }
+
             // Remove empty directories
             if entry_path.is_dir() {
                 log::debug!("Trying to remove dir {}.", entry_path.display());
@@ -403,28 +401,28 @@ impl FindInModList for Vec<Manifest> {
 }
 impl FindInModList for &[Manifest] {
     fn find_mod(&self, mod_name: &str) -> Option<usize> {
-        if let Some(m) = self.find_mod_by_name(&mod_name) {
-            Some(m)
-        } else if let Ok(idx) = usize::from_str_radix(&mod_name, 10) {
-            self.get(idx).map(|_| idx)
-        } else if let Some(m) = self.find_mod_by_name_fuzzy(&mod_name) {
-            Some(m)
-        } else {
-            None
-        }
+        self.find_mod_by_name(mod_name).map_or_else(
+            || {
+                mod_name.parse::<usize>().map_or_else(
+                    |_| self.find_mod_by_name_fuzzy(mod_name),
+                    |idx| self.get(idx).map(|_| idx),
+                )
+            },
+            Some,
+        )
     }
 
     fn find_mod_by_name(&self, name: &str) -> Option<usize> {
         self.iter()
             .enumerate()
-            .find_map(|(idx, m)| (m.name() == name).then(|| idx))
+            .find_map(|(idx, m)| (m.name() == name).then_some(idx))
     }
     fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize> {
         let matcher = SkimMatcherV2::default();
         let mut match_vec = Vec::new();
 
         self.iter().enumerate().for_each(|(idx, m)| {
-            let i = matcher.fuzzy_match(m.name(), &fuzzy_name).unwrap_or(0);
+            let i = matcher.fuzzy_match(m.name(), fuzzy_name).unwrap_or(0);
             match_vec.push((idx, i));
         });
 

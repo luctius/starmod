@@ -26,15 +26,10 @@ impl Default for GameCmd {
     }
 }
 impl GameCmd {
-    pub fn execute(self, settings: &mut Settings) -> Result<()> {
+    pub fn execute(self, settings: &Settings) -> Result<()> {
         match self {
             Self::Run { cmd } => cmd
-                .unwrap_or_else(|| {
-                    settings
-                        .default_run()
-                        .map(|r| r.into())
-                        .unwrap_or(RunCmd::default())
-                })
+                .unwrap_or_else(|| settings.default_run().map(Into::into).unwrap_or_default())
                 .execute(settings),
             Self::EditConfig { config_name } => edit_game_config_files(settings, config_name),
         }
@@ -55,16 +50,16 @@ pub enum RunCmd {
     XEdit,
 }
 impl RunCmd {
-    pub fn execute(self, settings: &mut Settings) -> Result<()> {
+    pub fn execute(self, settings: &Settings) -> Result<()> {
         match self {
-            Self::Game | Self::Loader | Self::XEdit => Self::run_executable(&settings, self),
+            Self::Game | Self::Loader | Self::XEdit => self.run_executable(settings),
             Self::Loot => match settings.loot() {
-                LootType::Windows(_) => Self::run_executable(&settings, self),
-                LootType::FlatPack => Self::run_flatpack_loot(&settings),
+                LootType::Windows(_) => self.run_executable(settings),
+                LootType::FlatPack => Self::run_flatpack_loot(settings),
             },
         }
     }
-    fn run_executable(settings: &Settings, cmd: RunCmd) -> Result<()> {
+    fn run_executable(self, settings: &Settings) -> Result<()> {
         if let Some(proton_dir) = settings.proton_dir() {
             if let Some(compat_dir) = settings.compat_dir() {
                 if let Some(steam_dir) = settings.steam_dir() {
@@ -77,7 +72,7 @@ impl RunCmd {
                     let mut proton_exe = proton_dir.to_path_buf();
                     proton_exe.push("proton");
 
-                    let executable = match cmd {
+                    let executable = match self {
                         Self::Game => Some(settings.game_dir().join(settings.game().exe_name())),
                         Self::Loader => {
                             Some(settings.game_dir().join(settings.game().loader_name()))
@@ -89,13 +84,9 @@ impl RunCmd {
                                 None
                             }
                         }
-                        Self::XEdit => {
-                            if let Some(xedit_dir) = settings.xedit_dir() {
-                                Some(xedit_dir.join(settings.game().xedit_name()))
-                            } else {
-                                None
-                            }
-                        }
+                        Self::XEdit => settings
+                            .xedit_dir()
+                            .map(|xedit_dir| xedit_dir.join(settings.game().xedit_name())),
                     };
 
                     if let Some(executable) = executable {
@@ -117,10 +108,8 @@ impl RunCmd {
                             if !output.status.success() && !output.stdout.is_empty() {
                                 log::info!("{:?}", output.stdout);
                                 //FIXME: output.status.exit_ok()
-                                Ok(())
-                            } else {
-                                Ok(())
                             }
+                            Ok(())
                         } else {
                             Err(SettingErrors::ExecutableNotFound(executable).into())
                         }
@@ -155,10 +144,8 @@ impl RunCmd {
         if !output.status.success() && !output.stdout.is_empty() {
             log::info!("{:?}", output.stdout);
             //FIXME: output.status.exit_ok()
-            Ok(())
-        } else {
-            Ok(())
         }
+        Ok(())
     }
 }
 
@@ -183,17 +170,18 @@ fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> R
                 entry
                     .file_name()
                     .to_str()
-                    .map(|f| settings.game().ini_files().contains(&f))
-                    .unwrap_or(false)
+                    .is_some_and(|f| settings.game().ini_files().contains(&f))
             })
             .for_each(|f| {
                 if let Ok(f) = f {
-                    config_files_to_edit.push(Utf8PathBuf::try_from(f.into_path()).unwrap())
+                    config_files_to_edit.push(Utf8PathBuf::try_from(f.into_path()).unwrap());
                 }
             });
     }
 
-    if !config_files_to_edit.is_empty() {
+    if config_files_to_edit.is_empty() {
+        log::info!("No relevant config files found.");
+    } else {
         log::info!("Editing: {:?}", config_files_to_edit);
 
         let mut editor_cmd = std::process::Command::new(settings.editor());
@@ -201,8 +189,6 @@ fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> R
             editor_cmd.arg(f);
         }
         editor_cmd.spawn()?.wait()?;
-    } else {
-        log::info!("No relevant config files found.");
     }
 
     Ok(())

@@ -12,63 +12,64 @@ pub enum Game {
     Starfield,
 }
 impl Game {
-    pub fn mod_manager_name(&self) -> &'static str {
+    pub const fn mod_manager_name(self) -> &'static str {
         match self {
             Self::Starfield => "starmod",
         }
     }
-    pub fn game_name(&self) -> &'static str {
+    pub const fn game_name(self) -> &'static str {
         match self {
             Self::Starfield => "Starfield",
         }
     }
-    pub fn nexus_game_name(&self) -> &'static str {
+    pub const fn nexus_game_name(self) -> &'static str {
         match self {
             Self::Starfield => "starfield",
         }
     }
     #[cfg(feature = "loadorder")]
-    pub fn game_id(&self) -> GameId {
+    pub fn game_id(self) -> GameId {
         match self {
             Self::Starfield => GameId::Starfield,
         }
     }
-    pub const fn steam_id(&self) -> usize {
+    pub const fn steam_id(self) -> usize {
         match self {
+            #[allow(clippy::unreadable_literal)]
             Self::Starfield => 1716740,
         }
     }
-    pub const fn exe_name(&self) -> &'static str {
+    pub const fn exe_name(self) -> &'static str {
         match self {
             Self::Starfield => "Starfield.exe",
         }
     }
-    pub const fn loader_name(&self) -> &'static str {
+    pub const fn loader_name(self) -> &'static str {
         match self {
             Self::Starfield => "sfse_loader.exe",
         }
     }
-    pub const fn loot_name(&self) -> &'static str {
+    pub const fn loot_name(self) -> &'static str {
         match self {
             Self::Starfield => "loot.exe",
         }
     }
-    pub const fn xedit_name(&self) -> &'static str {
+    pub const fn xedit_name(self) -> &'static str {
         match self {
             Self::Starfield => "sfedit.exe",
         }
     }
-    pub const fn ini_files(&self) -> &[&'static str] {
+    pub const fn ini_files(self) -> &'static [&'static str] {
         match self {
             Self::Starfield => &["Starfield.ini", "StarfieldPrefs.ini", "StarfieldCustom.ini"],
         }
     }
-    pub const fn my_game_dir(&self) -> &'static str {
+    pub const fn my_game_dir(self) -> &'static str {
         match self {
             Self::Starfield => "pfx/drive_c/users/steamuser/My Documents/My Games/Starfield",
         }
     }
-    pub fn find_game(&self) -> Option<Utf8PathBuf> {
+    pub const fn find_game() -> Option<Utf8PathBuf> {
         // dirs::home_dir()
         //     .map(|home_dir| {
         //         let walker = WalkDir::new(&home_dir)
@@ -95,7 +96,7 @@ impl Game {
         //     .flatten()
         None
     }
-    pub fn find_steam_dirs() -> Vec<Utf8PathBuf> {
+    pub const fn find_steam_dirs() -> Vec<Utf8PathBuf> {
         // let mut steam_dirs = Vec::new();
 
         // if let Some(home_dir) = dirs::home_dir() {

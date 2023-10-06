@@ -1,4 +1,3 @@
-use anyhow::Result;
 use camino::Utf8Path;
 use serde::{Deserialize, Serialize};
 
@@ -10,34 +9,22 @@ pub struct LoaderManifest {
     exe: InstallFile,
 }
 impl LoaderManifest {
-    pub fn new(files: Vec<InstallFile>) -> Self {
+    pub fn new(files: &[InstallFile]) -> Self {
         //TODO fix unwraps
         let exe = files
             .iter()
-            .find_map(|isf| {
-                if isf.source().extension().unwrap_or_default().eq("exe") {
-                    Some(isf)
-                } else {
-                    None
-                }
-            })
+            .find(|isf| isf.source().extension().unwrap_or_default().eq("exe"))
             .unwrap()
             .clone();
         let dll = files
             .iter()
-            .find_map(|isf| {
-                if isf.source().extension().unwrap_or_default().eq("dll") {
-                    Some(isf)
-                } else {
-                    None
-                }
-            })
+            .find(|isf| isf.source().extension().unwrap_or_default().eq("dll"))
             .unwrap()
             .clone();
 
-        Self { exe, dll }
+        Self { dll, exe }
     }
-    pub fn files(&self, _cache_dir: &Utf8Path) -> Result<Vec<InstallFile>> {
-        Ok(vec![self.dll.clone(), self.exe.clone()])
+    pub fn files(&self, _cache_dir: &Utf8Path) -> Vec<InstallFile> {
+        vec![self.dll.clone(), self.exe.clone()]
     }
 }

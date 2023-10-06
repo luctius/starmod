@@ -14,7 +14,7 @@ pub enum PurgeCmd {
     Cache,
 }
 impl PurgeCmd {
-    pub fn execute(self, settings: &mut Settings) -> Result<()> {
+    pub fn execute(self, settings: &Settings) -> Result<()> {
         match self {
             Self::Config => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
