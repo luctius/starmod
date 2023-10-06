@@ -423,8 +423,8 @@ pub fn create_table(headers: Vec<&'static str>) -> Table {
     let mut table = Table::new();
     table
         .load_preset(NOTHING)
-        // .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_content_arrangement(ContentArrangement::Disabled)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        // .set_content_arrangement(ContentArrangement::Disabled)
         .set_header(headers);
     table
 }
