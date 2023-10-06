@@ -100,7 +100,11 @@ impl RunCmd {
 
                     if let Some(executable) = executable {
                         if executable.exists() {
-                            log::debug!("Running 'STEAM_COMPAT_DATA_PATH={} STEAM_COMPAT_CLIENT_INSTALL_PATH={} {} run {}'", compat_dir, steam_dir, proton_exe, executable );
+                            if log::log_enabled!(log::Level::Debug) {
+                                log::debug!("Running 'STEAM_COMPAT_DATA_PATH={} STEAM_COMPAT_CLIENT_INSTALL_PATH={} {} run {}'", compat_dir, steam_dir, proton_exe, executable );
+                            } else {
+                                log::info!("Running '{}'", executable);
+                            }
 
                             let output = std::process::Command::new(proton_exe)
                                 .arg("run")
