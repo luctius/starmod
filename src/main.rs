@@ -9,6 +9,7 @@
     //warnings,
     //unused,
     unsafe_code,
+// missing_docs,
 )]
 #![warn(
     trivial_casts,
@@ -22,6 +23,7 @@
 use anyhow::Result;
 use clap::{Command, CommandFactory, Parser, Subcommand};
 use clap_complete::{generate, Generator, Shell};
+use comfy_table::{Cell, Color};
 use flexi_logger::{detailed_format, Cleanup, Criterion, FileSpec, Logger, Naming, WriteMode};
 use game::Game;
 use shadow_rs::shadow;
@@ -42,7 +44,7 @@ mod utils;
 
 use settings::{LogLevel, Settings};
 
-use crate::settings::SettingErrors;
+use crate::settings::{create_table, SettingErrors};
 shadow!(build);
 
 /// Simple Starfield Modding Application
@@ -85,7 +87,7 @@ pub struct AppLetArgs {
     generator: Option<Shell>,
 
     #[command(subcommand)]
-    command: Option<Subcommands>,
+    cmd: Option<Subcommands>,
 
     /// Show information related to this build of starmod
     #[arg(short = 'V', long)]
@@ -94,6 +96,10 @@ pub struct AppLetArgs {
     /// Show information related to this build of starmod
     #[arg(long)]
     long_version: bool,
+
+    /// Show Long Help
+    #[arg(long)]
+    list_commands: bool,
 }
 
 fn log_stdout(
@@ -107,21 +113,6 @@ fn log_stdout(
 pub fn main() -> Result<()> {
     let applet = StarMod::parse();
     let (game, args) = applet.applet.unwrap();
-
-    if args.long_version {
-        println!("version:{}", build::CLAP_LONG_VERSION);
-        return Ok(());
-    } else if args.version {
-        let tag = build::TAG;
-        let tag = if tag.is_empty() {
-            build::SHORT_COMMIT
-        } else {
-            tag
-        };
-
-        println!("{} ({})", build::PKG_VERSION, tag);
-        return Ok(());
-    }
 
     let settings = Settings::read_config(game, args.verbose)?;
 
@@ -140,9 +131,24 @@ pub fn main() -> Result<()> {
         .write_mode(WriteMode::Direct)
         .start()?;
 
-    // let multi = MultiProgress::new();
-    // LogWrapper::new(multi.clone(), logger).try_init().unwrap();
+    if args.long_version {
+        println!("version:{}", build::CLAP_LONG_VERSION);
+        return Ok(());
+    } else if args.version {
+        let tag = build::TAG;
+        let tag = if tag.is_empty() {
+            build::SHORT_COMMIT
+        } else {
+            tag
+        };
 
+        println!("{} ({})", build::PKG_VERSION, tag);
+        return Ok(());
+    }
+    if args.list_commands {
+        list_commands();
+        return Ok(());
+    }
     if let Some(generator) = args.generator {
         let mut cmd = AppLetArgs::command();
         log::info!("Generating completion file for {generator}...");
@@ -150,10 +156,12 @@ pub fn main() -> Result<()> {
         return Ok(());
     }
 
+    log::trace!("cmd: {:?}", args.cmd);
+
     // Only allow create-config to be run when no valid settings are found
     if settings.valid_config() {
-        args.command.unwrap_or_default().execute(&settings)?;
-    } else if let Some(cmd @ Subcommands::Config { .. }) = args.command {
+        args.cmd.unwrap_or_default().execute(&settings)?;
+    } else if let Some(cmd @ Subcommands::Config { .. }) = args.cmd {
         cmd.execute(&settings)?;
     } else {
         return Err(SettingErrors::ConfigNotFound(settings.cmd_name().to_owned()).into());
@@ -164,4 +172,53 @@ pub fn main() -> Result<()> {
 
 fn print_completions<G: Generator>(gen: G, cmd: &mut Command) {
     generate(gen, cmd, cmd.get_name().to_string(), &mut std::io::stdout());
+}
+
+fn list_commands() {
+    let mut table = create_table(vec!["Command", "Help"]);
+    let mut list = vec![];
+
+    list.extend_from_slice(&gather_commands(
+        &AppLetArgs::command(),
+        AppLetArgs::command().get_name(),
+    ));
+
+    list.sort();
+
+    for (prev_cmd, c, help) in list {
+        let mut cmdtable = create_table(vec!["", ""]);
+        cmdtable.add_row(vec![
+            Cell::new(prev_cmd).fg(Color::DarkCyan),
+            Cell::new(c).fg(Color::White),
+        ]);
+
+        table.add_row(vec![
+            Cell::new(format!("{}", cmdtable.lines().last().unwrap())),
+            Cell::new(help),
+        ]);
+    }
+
+    log::info!("");
+    log::info!("{table}");
+}
+
+fn gather_commands(
+    cmd: &clap::Command,
+    previous_cmds: &str,
+) -> Vec<(String, String, clap::builder::StyledStr)> {
+    let mut list = Vec::new();
+
+    for cmd in cmd.get_subcommands() {
+        list.push((
+            previous_cmds.to_string(),
+            cmd.get_name().to_string(),
+            cmd.get_about().unwrap_or_default().to_owned(),
+        ));
+
+        if cmd.has_subcommands() {
+            let lcmd = previous_cmds.to_string() + " " + cmd.get_name();
+            list.extend_from_slice(&gather_commands(cmd, &lcmd));
+        }
+    }
+    list
 }

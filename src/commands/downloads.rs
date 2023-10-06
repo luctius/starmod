@@ -357,5 +357,13 @@ pub fn find_mod_by_name_fuzzy(
 
     match_vec.sort_unstable_by(|(_, _, ia), (_, _, ib)| ia.cmp(ib));
 
-    match_vec.last().map(|(sa, f, _)| (*(*sa), (*f).clone()))
+    if let Some((sa, f, score)) = match_vec.last() {
+        if *score > 80 {
+            Some((*(*sa), (*f).clone()))
+        } else {
+            None
+        }
+    } else {
+        None
+    }
 }

@@ -428,6 +428,14 @@ impl FindInModList for &[Manifest] {
 
         match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
 
-        match_vec.last().map(|(idx, _)| *idx)
+        if let Some((idx, score)) = match_vec.last() {
+            if *score > 80 {
+                Some(*idx)
+            } else {
+                None
+            }
+        } else {
+            None
+        }
     }
 }

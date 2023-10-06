@@ -19,41 +19,66 @@ use super::list::list_mods;
 
 //TODO: create custom and tag sub-commands
 
+/// Commands related to mods; defaults to showing the mod-list
 #[derive(Debug, Clone, Parser, Default)]
+#[clap(
+    after_help = "Note: The name of a mod can be (a part of) the litteral name or the index in the mod-list."
+)]
 pub enum ModCmd {
     /// Copy 'file_name' from mod 'origin_mod' to mod 'custom_mod'
     CopyToCustom {
-        origin_mod: String,
-        custom_mod: String,
-        file_name: String,
+        /// The source mod to copy <file_name> from.
+        source: String,
+        /// The destination mod to copy <file_name> to.
+        destination: String,
+        /// The <file_name> from <source> mod to copy.
+        file: String,
     },
     /// Create a new label with 'name'
-    CreateLabel { name: String },
+    CreateLabel {
+        /// Name of the label
+        name: String,
+    },
     /// Create a custom mod 'name', optionally, instead of creating a directory, link to 'origin'
     CreateCustom {
+        /// Name of the new custom mod.
         name: String,
+        /// Path to the underlying directory which will be symlinked into the cache directory.
         origin: Option<Utf8PathBuf>,
     },
     /// Disable mod 'name'
     #[clap(visible_aliases = &["dis", "d"])]
-    Disable { name: String },
+    Disable {
+        /// Name of the mod to disable
+        name: String,
+    },
     /// Disable all mods
     DisableAll,
     /// Disable 'file_name' from mod 'mod_name'
-    DisableFile { mod_name: String, file_name: String },
+    DisableFile {
+        /// Name of the mod which hosts <file>
+        name: String,
+        file: String,
+    },
     /// Copy file from mod 'name' 'config_name' to mod 'custom_mod_name' and run 'EDITOR' or 'xdg-open' on the new file.
     EditConfig {
+        /// name of the mod which hosts the config file
         name: String,
+        /// name of the mod which should host the modified config file
         destination_mod_name: String,
-        #[arg(short, long)]
+        /// Config file name, should not be used together with <--extention>
+        #[arg(short, long, group = "config")]
         config_name: Option<String>,
-        #[arg(short, long)]
+        /// Config file extention. Should not be used together with <--config_name>
+        #[arg(short, long, group = "config")]
         extension: Option<String>,
     },
     /// Enable mod 'name', optionally with priority 'priority'
     #[clap(visible_aliases = &["en", "e"])]
     Enable {
+        /// Name of the mod to enable
         name: String,
+        /// Optional: set mod to <priority> before enabling
         priority: Option<isize>,
     },
     /// Enable all mods
@@ -64,14 +89,30 @@ pub enum ModCmd {
     List,
     #[clap(visible_alias = "s")]
     /// Show the details of mod 'name'
-    Show { name: String },
+    Show {
+        /// Name of the mod to show.
+        name: String,
+    },
     /// Add tag <tag> to mod <name>
-    TagAdd { name: String, tag: String },
+    TagAdd {
+        /// Name of the mod to add <tag> to.
+        name: String,
+        /// Name of the tag
+        tag: String,
+    },
     /// Remove tag <tag> from mod <name>
-    TagRemove { name: String, tag: String },
+    TagRemove {
+        /// Name of the mod to add <tag> to.
+        name: String,
+        /// Name of the tag.
+        tag: String,
+    },
     /// Remove mod 'name' from installation.
     /// Does not remove the mod from the downloads directory.
-    Remove { name: String },
+    Remove {
+        /// Name of the mod to remove from the mod-list..
+        name: String,
+    },
     /// Rename mod 'old_mod_name' to 'new_mod_name'
     #[clap(visible_aliases = &["ren", "r"])]
     Rename {
@@ -81,7 +122,13 @@ pub enum ModCmd {
     /// Set mod to new priority;
     /// Setting a priority below zero disables the mod.
     #[clap(visible_aliases = &["set-prio", "sp"])]
-    SetPriority { name: String, priority: isize },
+    SetPriority {
+        /// Name of the mod to set to the new priority
+        name: String,
+        /// value of the new priority.
+        /// Setting this below zero permanently disabled the mod.
+        priority: isize,
+    },
 }
 impl ModCmd {
     pub fn execute(self, settings: &Settings) -> Result<()> {
@@ -102,8 +149,8 @@ impl ModCmd {
                 list_mods(settings)
             }
             Self::DisableFile {
-                mod_name,
-                file_name,
+                name: mod_name,
+                file: file_name,
             } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 mod_list.find_mod(&mod_name).map_or_else(
@@ -240,9 +287,9 @@ impl ModCmd {
                 Ok(())
             }
             Self::CopyToCustom {
-                origin_mod,
-                custom_mod,
-                file_name,
+                source: origin_mod,
+                destination: custom_mod,
+                file: file_name,
             } => {
                 let mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(origin_idx) = mod_list.find_mod(&origin_mod) {
@@ -383,59 +430,96 @@ fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
 }
 
 fn edit_mod_config_files(
-    _settings: &Settings,
-    _name: &str,
-    _destination_mod_name: &str,
-    _config_name: &Option<String>,
-    _extension: &Option<String>,
+    settings: &Settings,
+    name: &str,
+    destination_mod_name: &str,
+    config_name: &Option<String>,
+    extension: &Option<String>,
 ) -> Result<()> {
-    todo!()
-    // let mut config_files_to_edit = Vec::new();
-    // let mod_list = Vec::gather_mods(settings.cache_dir())?;
-    // if let Some(idx) = mod_list.find_mod(&name) {
-    //     let config_list = mod_list[idx].find_config_files(extension.as_deref())?;
-    //     if let Some(config_name) = config_name {
-    //         if let Some(cf) = config_list
-    //             .iter()
-    //             .find(|f| f.file_name().unwrap_or_default() == config_name)
-    //         {
-    //             let mut config_path = settings.cache_dir().to_path_buf();
-    //             config_path.push(cf);
-    //             config_files_to_edit.push(config_path);
-    //         }
-    //     } else {
-    //         for cf in config_list {
-    //             let mut config_path = settings.cache_dir().to_path_buf();
-    //             config_path.push(cf);
-    //             config_files_to_edit.push(config_path);
-    //         }
-    //     }
-    // }
+    let mod_list = Vec::gather_mods(settings.cache_dir())?;
+    let mod_idx = mod_list.find_mod(&name);
 
-    // if !config_files_to_edit.is_empty() {
-    //     if let Some(_destination_manifest) = mod_list.find_mod(&destination_mod_name) {
-    //         todo!();
-    //         // for f in config_files_to_edit {
-    //         //     f.strip_prefix(settings.cache_dir())
-    //         //         .unwrap()
-    //         //         .strip_prefix(manifest)
-    //         // }
+    if mod_idx.is_none() {
+        log::info!("Source mod '{}' not found.", name);
+        return Ok(());
+    }
 
-    //         // log::info!("Editing: {:?}", config_files_to_edit);
+    let config_files_to_edit = if let Some(idx) = mod_idx {
+        let manifest = &mod_list[idx];
+        let config_list = manifest.find_config_files(extension.as_deref())?;
+        if let Some(config_name) = config_name {
+            if let Some(cf) = config_list
+                .iter()
+                .find(|f| f.file_name().unwrap_or_default() == config_name)
+            {
+                let config_path = settings.cache_dir().join(cf);
+                vec![(
+                    config_path,
+                    cf.strip_prefix(manifest.manifest_dir())?.to_path_buf(),
+                )]
+            } else {
+                Vec::new()
+            }
+        } else {
+            let mut list = Vec::new();
+            for cf in config_list {
+                let config_path = settings.cache_dir().to_path_buf().join(&cf);
+                list.push((
+                    config_path,
+                    cf.strip_prefix(manifest.manifest_dir())?.to_path_buf(),
+                ));
+            }
+            list
+        }
+    } else {
+        Vec::new()
+    };
 
-    //         // let mut editor_cmd = std::process::Command::new(settings.editor());
-    //         // for f in config_files_to_edit {
-    //         //     let _ = editor_cmd.arg(f);
-    //         // }
+    if !config_files_to_edit.is_empty() {
+        if let Some(idx) = mod_list.find_mod(&destination_mod_name) {
+            let manifest = &mod_list[idx];
 
-    //         // let status = editor_cmd.spawn()?.wait()?;
-    //         // if !status.success() {
-    //         //     log::info!("Editor failed with exit status: {}", status);
-    //         // }
-    //     }
-    // } else {
-    //     log::info!("No relevant config files found.");
-    // }
+            let mut editor_cmd = std::process::Command::new(settings.editor());
+            for (source, dest) in &config_files_to_edit {
+                let dest = settings
+                    .cache_dir()
+                    .join(manifest.manifest_dir())
+                    .join(dest);
+                log::trace!("Copying config file {} to {}", source, &dest);
 
-    // Ok(())
+                DirBuilder::new()
+                    .recursive(true)
+                    .create(dest.parent().unwrap())?;
+
+                copy(source, &dest)?;
+                let _ = editor_cmd.arg(dest);
+            }
+
+            log::info!(
+                "Running '{} {}'",
+                settings.editor(),
+                config_files_to_edit
+                    .iter()
+                    .map(|(_, d)| d)
+                    .map(|d| settings
+                        .cache_dir()
+                        .join(manifest.manifest_dir())
+                        .join(d)
+                        .to_string())
+                    .collect::<Vec<_>>()
+                    .join(" ")
+            );
+
+            let status = editor_cmd.spawn()?.wait()?;
+            if !status.success() {
+                log::info!("Editor failed with exit status: {}", status);
+            }
+        } else {
+            log::info!("Destination mod not found.");
+        }
+    } else {
+        log::info!("No relevant config files found.");
+    }
+
+    Ok(())
 }

@@ -6,10 +6,10 @@ pub mod mods;
 pub mod purge;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{builder::styling, Parser};
 use comfy_table::{Cell, Color};
 
-use crate::{settings::create_table, tag::Tag, Settings};
+use crate::{list_commands, settings::create_table, tag::Tag, Settings};
 
 use self::{
     config::ConfigCmd,
@@ -28,7 +28,15 @@ use self::plugins::PluginCmd;
 //TODO: we should probably add the most used commands here too
 // like set-priority etc
 
+const STYLE: styling::Styles = styling::Styles::styled()
+    .header(styling::AnsiColor::BrightYellow.on_default())
+    .usage(styling::AnsiColor::BrightYellow.on_default())
+    .literal(styling::AnsiColor::BrightWhite.on_default())
+    .placeholder(styling::AnsiColor::Cyan.on_default());
+
 #[derive(Debug, Clone, Parser)]
+#[command()]
+#[clap(styles=STYLE)]
 pub enum Subcommands {
     /// Config related commands; defaults to showing the current settings.
     #[clap(visible_aliases = &["configs", "c"])]
@@ -66,13 +74,15 @@ pub enum Subcommands {
         #[command(subcommand)]
         cmd: Option<RunCmd>,
     },
-    /// Dangerous: removal of starmod's files
+    /// Dangerous: commands related to the removal of starmod's files.
     Purge {
         #[command(subcommand)]
         cmd: PurgeCmd,
     },
-    /// Show explanation of the colours used by starmod
+    /// Show explanation of the colours used by starmod.
     Legenda,
+    /// Show a flattened list all commands
+    ListCommands,
 
     #[cfg(feature = "loadorder")]
     /// Plugin related commands
@@ -93,6 +103,10 @@ impl Subcommands {
             Self::Run { cmd } => RunCmd::execute(cmd.unwrap_or_default(), settings),
             Self::Game { cmd } => GameCmd::execute(cmd.unwrap_or_default(), settings),
             Self::Purge { cmd } => PurgeCmd::execute(cmd, settings),
+            Self::ListCommands => {
+                list_commands();
+                Ok(())
+            }
             Self::Legenda => {
                 show_legenda();
                 Ok(())

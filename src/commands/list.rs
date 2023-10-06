@@ -91,6 +91,11 @@ pub fn list_mods(settings: &Settings) -> Result<()> {
         let tag = if md.is_enabled() { tag } else { Tag::Disabled };
 
         let color = Color::from(tag);
+        let idx_color = if color == Color::White {
+            Color::Reset
+        } else {
+            color
+        };
 
         let notes = {
             let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
@@ -102,7 +107,7 @@ pub fn list_mods(settings: &Settings) -> Result<()> {
         };
 
         table.add_row(vec![
-            Cell::new(idx.to_string()).fg(color),
+            Cell::new(idx.to_string()).fg(idx_color),
             Cell::new(md.name().to_string()).fg(color),
             Cell::new(md.priority().to_string()).fg(color),
             Cell::new(tag).fg(color),
@@ -113,7 +118,7 @@ pub fn list_mods(settings: &Settings) -> Result<()> {
             )
             .fg(color),
             Cell::new(md.kind().to_string()).fg(color),
-            Cell::new(format!("{:?}", md.tags())),
+            Cell::new(format!("{}", md.tags().join(","))),
             Cell::new(notes),
         ]);
     }

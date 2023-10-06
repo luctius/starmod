@@ -2,9 +2,10 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, Default)]
 pub enum ModState {
     Enabled,
+    #[default]
     Disabled,
 }
 impl ModState {

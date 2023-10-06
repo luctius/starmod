@@ -84,6 +84,15 @@ pub enum LogLevel {
     Debug,
     Trace,
 }
+impl From<u8> for LogLevel {
+    fn from(verbose: u8) -> Self {
+        match verbose {
+            0 => Self::Info,
+            1 => Self::Debug,
+            2 | _ => Self::Trace,
+        }
+    }
+}
 impl From<LogLevel> for LevelFilter {
     fn from(ll: LogLevel) -> Self {
         match ll {
@@ -117,13 +126,19 @@ pub struct Settings {
     log_path: Utf8PathBuf,
     download_dir: Utf8PathBuf,
     game_dir: Utf8PathBuf,
+    #[serde(default)]
     proton_dir: Option<Utf8PathBuf>,
+    #[serde(default)]
     compat_dir: Option<Utf8PathBuf>,
+    #[serde(default)]
     steam_dir: Option<Utf8PathBuf>,
     loot: LootType,
     loot_data_dir: Utf8PathBuf,
+    #[serde(default)]
     xedit_dir: Option<Utf8PathBuf>,
+    #[serde(default)]
     default_run: Option<RunCmdKind>,
+    #[serde(default)]
     editor: Option<String>,
 }
 impl Settings {
@@ -408,8 +423,8 @@ pub fn create_table(headers: Vec<&'static str>) -> Table {
     let mut table = Table::new();
     table
         .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        // .set_width(120)
+        // .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_content_arrangement(ContentArrangement::Disabled)
         .set_header(headers);
     table
 }

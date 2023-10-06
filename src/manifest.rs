@@ -101,17 +101,22 @@ impl ManifestInternal {
 
 #[derive(Clone, Debug, Deserialize, Serialize)]
 pub struct Manifest {
+    internal: ManifestInternal,
     #[serde(skip_serializing, default)]
     cache_dir: Utf8PathBuf,
     manifest_dir: Utf8PathBuf,
     bare_file_name: String,
     name: String,
+    #[serde(default)]
     version: Option<String>,
+    #[serde(default)]
     nexus_id: Option<u32>,
+    #[serde(default)]
     mod_state: ModState,
     mod_kind: ModKind,
+    #[serde(default)]
     priority: isize,
-    internal: ManifestInternal,
+    #[serde(default)]
     tags: Vec<String>,
 }
 impl Manifest {
