@@ -75,13 +75,11 @@ pub enum ModCmd {
         #[arg(short, long, group = "config")]
         extension: Option<String>,
     },
-    /// Enable mod 'name', optionally with priority 'priority'
+    /// Enable mod 'name'
     #[clap(visible_aliases = &["en", "e"])]
     Enable {
         /// Name of the mod to enable
         name: String,
-        /// Optional: set mod to <priority> before enabling
-        priority: Option<isize>,
     },
     /// Enable all mods
     EnableAll,
@@ -157,6 +155,9 @@ impl ModCmd {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&mod_name) {
                     if mod_list[idx].disable_file(&file_name) {
+                        if mod_list[idx].is_enabled() {
+                            mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
+                        }
                         Ok(())
                     } else {
                         log::trace!(
@@ -169,12 +170,9 @@ impl ModCmd {
                     Err(ModErrors::ModNotFound(mod_name).into())
                 }
             }
-            Self::Enable { name, priority } => {
+            Self::Enable { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&name) {
-                    if let Some(prio) = priority {
-                        mod_list[idx].set_priority(prio)?;
-                    }
                     mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                     list_mods(settings)
                 } else {
@@ -251,10 +249,19 @@ impl ModCmd {
             Self::SetPriority { name, priority } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
                 if let Some(idx) = mod_list.find_mod(&name) {
+                    let old_prio = mod_list[idx].priority();
                     mod_list[idx].set_priority(priority)?;
-                    if priority < 0 {
-                        mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
+                    if mod_list[idx].is_disabled() {
+                        let priority = if priority > old_prio {
+                            priority
+                        } else {
+                            old_prio
+                        };
+
+                        (&mut mod_list[0..priority as usize])
+                            .re_enable(settings.cache_dir(), settings.game_dir())?;
                     }
+
                     crate::commands::list::list_mods(settings)?;
                     Ok(())
                 } else {

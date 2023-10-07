@@ -147,6 +147,9 @@ impl Manifest {
     }
     pub fn set_priority(&mut self, priority: isize) -> Result<()> {
         self.priority = priority;
+        if self.priority < 0 {
+            self.set_disabled()?;
+        }
         self.write()
     }
     pub fn from_file(cache_dir: &Utf8Path, archive: &Utf8Path) -> Result<Self> {
@@ -295,9 +298,9 @@ impl Manifest {
     pub const fn is_enabled(&self) -> bool {
         self.mod_state().is_enabled()
     }
-    // pub const fn is_disabled(&self) -> bool {
-    //     !self.mod_state().is_enabled()
-    // }
+    pub const fn is_disabled(&self) -> bool {
+        !self.mod_state().is_enabled()
+    }
     pub const fn kind(&self) -> ModKind {
         self.mod_kind
     }
