@@ -188,15 +188,12 @@ impl ModList for &mut [Manifest] {
         let mut file_list = Vec::with_capacity(conflict_list.len());
         let dir_cache = Arc::new(Mutex::new(HashSet::new()));
 
-        dbg!(&conflict_list);
         log::debug!("Collecting File List");
         for m in self.iter_mut() {
             if m.is_enabled() {
                 file_list.extend(m.enlist_files(&conflict_list)?);
             }
         }
-
-        dbg!(&file_list);
 
         let sty = ProgressStyle::with_template("{prefix:.bold.dim} {wide_msg}: {bar:40}").unwrap();
         let progress = ProgressBar::new(file_list.len() as u64 + self.len() as u64)
