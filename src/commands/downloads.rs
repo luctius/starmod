@@ -374,9 +374,9 @@ pub fn find_mod_by_name_fuzzy(
         .map(|(_, (sa, f, _))| (*(*sa), (*f).clone()))
         .collect::<Vec<_>>();
 
-    if match_vec.len() == 0 {
+    if match_vec.len() == 1 {
         match_vec.first().cloned()
-    } else if match_vec.len() > 0 {
+    } else if match_vec.len() > 1 {
         let choice = if stdin().is_terminal() {
             //TODO more color and stuff
 

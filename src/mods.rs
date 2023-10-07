@@ -3,10 +3,11 @@ use std::{
     fmt::Display,
     fs::{self, read_link, remove_dir, remove_file, rename, DirBuilder},
     io::{stdin, IsTerminal},
+    path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -176,14 +177,25 @@ impl ModList for &mut [Manifest] {
     fn enable(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path) -> Result<()> {
         use rayon::prelude::*;
 
+        log::debug!("Temp enabling all files in list");
+        for m in self.iter_mut() {
+            m.temp_set_enabled();
+        }
+
         let conflict_list = conflict_list_by_file(self)?;
         let mut file_list = Vec::with_capacity(conflict_list.len());
         let dir_cache = Arc::new(Mutex::new(HashSet::new()));
 
+        dbg!(&conflict_list);
         log::debug!("Collecting File List");
-        for m in self.iter() {
-            file_list.extend(m.enlist_files(&conflict_list)?);
+        for m in self.iter_mut() {
+            m.temp_set_enabled();
+            if m.priority() >= 0 {
+                file_list.extend(m.enlist_files(&conflict_list)?);
+            }
         }
+
+        dbg!(&file_list);
 
         let sty = ProgressStyle::with_template("{prefix:.bold.dim} {wide_msg}: {bar:40}").unwrap();
         let progress = ProgressBar::new(file_list.len() as u64 + self.len() as u64)
@@ -208,33 +220,38 @@ impl ModList for &mut [Manifest] {
                 dir_cache.lock().unwrap().insert(destination_base);
             }
 
-            // Remove existing symlinks which point back to our archive dir
-            // This ensures that the last mod wins, but we should do conflict
-            // detection and resolution before this, so we can inform the user.
-            if destination.is_symlink() {
-                let target = Utf8PathBuf::try_from(read_link(&destination)?)?;
+            if destination.exists() {
+                log::trace!("Destination already exists.");
 
-                if target.starts_with(cache_dir) {
-                    remove_file(&destination)?;
-                    log::debug!("overrule {} ({} > {})", destination, origin, target);
+                // Remove existing symlinks which point back to our archive dir
+                // This ensures that the last mod wins, but we should do conflict
+                // detection and resolution before this, so we can inform the user.
+                if destination.is_symlink() {
+                    let target = Utf8PathBuf::try_from(read_link(&destination)?)?;
+
+                    if target.starts_with(cache_dir) {
+                        remove_file(&destination)?;
+                        log::debug!("overrule {} ({} > {})", destination, origin, target);
+                    }
+                }
+
+                // Check if there is a backup file made by us
+                // if so, restore it.
+                if destination.is_file() {
+                    let bkp_destination = destination.add_extension(BACKUP_EXTENTION);
+                    log::info!(
+                        "renaming foreign file from {} -> {}",
+                        destination,
+                        bkp_destination
+                    );
+                    rename(&destination, bkp_destination)?;
                 }
             }
 
-            // Check if there is a backup file made by us
-            // if so, restore it.
-            if destination.is_file() {
-                let bkp_destination = destination.add_extension(BACKUP_EXTENTION);
-                log::info!(
-                    "renaming foreign file from {} -> {}",
-                    destination,
-                    bkp_destination
-                );
-                rename(&destination, bkp_destination)?;
-            }
-
-            std::os::unix::fs::symlink(&origin, &destination)?;
-
             log::debug!("link {} to {}", origin, destination);
+            std::os::unix::fs::symlink(&origin, &destination)
+                .with_context(|| format!("Unable to link {} -> {}", origin, destination))?;
+
             progress.inc(1);
             Ok::<(), anyhow::Error>(())
         })?;
@@ -264,21 +281,31 @@ impl ModList for &mut [Manifest] {
         let sty = ProgressStyle::with_template("{prefix:.bold.dim} {wide_msg}: {bar:40}").unwrap();
         let progress = ProgressBar::new(file_list.len() as u64 + self.len() as u64).with_style(sty);
 
-        log::trace!("file_list: {:?}", file_list);
-
         log::debug!("Start Removing files");
         file_list.par_iter().try_for_each(|f| {
             let origin = cache_dir.join(f.source());
             let destination = game_dir.join(Utf8PathBuf::from(f.destination()));
 
+            log::trace!("disabling file: {} -> {}", destination, origin);
+
             if destination.is_file()
                 && destination.is_symlink()
-                && read_link(&destination)? == origin
+                && read_link(&destination)?.strip_prefix(&cache_dir).is_ok()
             {
-                remove_file(&destination)?;
-                log::debug!("removed {} -> {}", destination, origin);
+                log::debug!("removing {} -> {}", destination, origin);
+                remove_file(&destination).ok();
             } else {
-                log::debug!("passing-over {}", destination);
+                let destination = Utf8PathBuf::try_from(destination)?;
+                log::debug!(
+                    "passing-over {} -> {}, (reason: is-file: {}, is-symlink: {}, points-to: {})",
+                    destination,
+                    origin,
+                    destination.is_file(),
+                    destination.is_symlink(),
+                    read_link(&destination)
+                        .unwrap_or(PathBuf::from("<Invalid>"))
+                        .display(),
+                );
             }
             progress.inc(1);
             Ok::<(), anyhow::Error>(())
@@ -442,9 +469,9 @@ impl FindInModList for &[Manifest] {
             .map(|(_, (m, _))| *m)
             .collect::<Vec<_>>();
 
-        if match_vec.len() == 0 {
+        if match_vec.len() == 1 {
             match_vec.first().copied()
-        } else if match_vec.len() > 0 {
+        } else if match_vec.len() > 1 {
             let choice = if stdin().is_terminal() {
                 //TODO more color and stuff
 

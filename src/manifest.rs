@@ -199,9 +199,21 @@ impl Manifest {
         self.name = name;
         self.write()
     }
-    pub fn set_enabled(&mut self) -> Result<()> {
-        self.mod_state = ModState::Enabled;
-        self.write()
+    pub fn set_enabled(&mut self) -> Result<bool> {
+        if self.priority >= 0 {
+            self.mod_state = ModState::Enabled;
+            self.write().map(|_| true)
+        } else {
+            Ok(false)
+        }
+    }
+    pub fn temp_set_enabled(&mut self) -> bool {
+        if self.priority >= 0 {
+            self.mod_state = ModState::Enabled;
+            true
+        } else {
+            false
+        }
     }
     pub fn set_disabled(&mut self) -> Result<()> {
         self.mod_state = ModState::Disabled;
@@ -283,10 +295,9 @@ impl Manifest {
     pub const fn is_enabled(&self) -> bool {
         self.mod_state().is_enabled()
     }
-    // #[allow(unused)]
-    // pub const fn is_disabled(&self) -> bool {
-    //     !self.mod_state().is_enabled()
-    // }
+    pub const fn is_disabled(&self) -> bool {
+        !self.mod_state().is_enabled()
+    }
     pub const fn kind(&self) -> ModKind {
         self.mod_kind
     }

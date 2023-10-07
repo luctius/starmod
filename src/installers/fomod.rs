@@ -144,6 +144,23 @@ pub fn create_fomod_manifest(
         }
     }
 
+    let mut unique_files = HashSet::new();
+    let mut conflicts = Vec::new();
+    for f in &files {
+        if !unique_files.insert(f.destination()) {
+            conflicts.push(f.destination().to_string());
+        }
+    }
+    for c in conflicts {
+        let idx = files
+            .iter()
+            .enumerate()
+            .find(|(_, isf)| isf.destination() == c)
+            .map(|(idx, _)| idx)
+            .unwrap();
+        files.remove(idx);
+    }
+
     Ok(Manifest::new(
         cache_dir,
         mod_dir,
