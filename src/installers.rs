@@ -73,4 +73,32 @@ pub mod stdin {
             }
         }
     }
+
+    #[derive(Copy, Clone, Debug, Default)]
+    pub enum InputWithDefault {
+        Input(Input),
+        #[default]
+        Default,
+    }
+    impl From<Input> for InputWithDefault {
+        fn from(i: Input) -> Self {
+            Self::Input(i)
+        }
+    }
+    impl Display for InputWithDefault {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "input")
+        }
+    }
+    impl FromStr for InputWithDefault {
+        type Err = ParseIntError;
+
+        fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+            if s.to_lowercase() == "" {
+                Ok(Self::Default)
+            } else {
+                Input::from_str(s).map(Self::from)
+            }
+        }
+    }
 }

@@ -2,6 +2,7 @@ use std::{
     collections::HashSet,
     fmt::Display,
     fs::{self, read_link, remove_dir, remove_file, rename, DirBuilder},
+    io::{stdin, IsTerminal, Stdin},
     sync::{Arc, Mutex},
 };
 
@@ -9,6 +10,7 @@ use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use indicatif::{ProgressBar, ProgressStyle};
+use read_stdin::prompt_until_ok;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
@@ -19,6 +21,7 @@ use crate::{
         data::create_data_manifest,
         fomod::{create_fomod_manifest, FOMOD_INFO_FILE, FOMOD_MODCONFIG_FILE},
         loader::create_loader_manifest,
+        stdin::{Input, InputWithDefault},
     },
     manifest::{Manifest, MANIFEST_EXTENSION},
     utils::AddExtension,
@@ -401,10 +404,14 @@ impl FindInModList for Vec<Manifest> {
 }
 impl FindInModList for &[Manifest] {
     fn find_mod(&self, mod_name: &str) -> Option<usize> {
-        self.find_mod_by_name(mod_name).map_or_else(
-            || {
-                mod_name.parse::<usize>().map_or_else(
-                    |_| self.find_mod_by_name_fuzzy(mod_name),
+        // check if this is an index,
+        // if not, search by full name,
+        // finally search fuzzy name
+
+        mod_name.parse::<usize>().map_or_else(
+            |_| {
+                self.find_mod_by_name(mod_name).map_or_else(
+                    || self.find_mod_by_name_fuzzy(mod_name),
                     |idx| self.get(idx).map(|_| idx),
                 )
             },
@@ -427,13 +434,52 @@ impl FindInModList for &[Manifest] {
         });
 
         match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
+        let match_vec = match_vec
+            .iter()
+            .rev()
+            .enumerate()
+            .take_while(|(i, (_, mv))| *i <= 5 && *mv > 50)
+            .map(|(_, (m, _))| *m)
+            .collect::<Vec<_>>();
 
-        if let Some((idx, score)) = match_vec.last() {
-            if *score > 80 {
-                Some(*idx)
+        if match_vec.len() == 0 {
+            match_vec.first().copied()
+        } else if match_vec.len() > 0 {
+            let choice = if stdin().is_terminal() {
+                //TODO more color and stuff
+
+                log::info!(
+                    "Multiple matches found; Please choose one: (Defaults to 0/'{}' on Enter)",
+                    self[match_vec[0]].name()
+                );
+                for (i, idx) in match_vec.iter().enumerate() {
+                    let name = self[*idx].name();
+                    log::info!("{i}) {}", name);
+                }
+                log::info!("E) Exit");
+
+                loop {
+                    let input: InputWithDefault = prompt_until_ok("Select : ");
+                    match input {
+                        InputWithDefault::Input(Input::Exit) => {
+                            // return Err(InstallerError::InstallerCancelled(mod_name.to_string()).into())
+                            todo!()
+                        }
+                        InputWithDefault::Default => {
+                            break 0;
+                        }
+                        InputWithDefault::Input(Input::Digit(d)) => {
+                            if (d as usize) < match_vec.len() {
+                                break d as usize;
+                            }
+                        }
+                    }
+                }
             } else {
-                None
-            }
+                0
+            };
+
+            match_vec.get(choice).copied()
         } else {
             None
         }

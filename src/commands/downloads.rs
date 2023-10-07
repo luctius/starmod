@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{self, metadata, remove_dir_all, remove_file},
+    io::{stdin, IsTerminal},
     sync::{atomic::AtomicBool, Arc, Mutex},
     thread,
     time::Duration,
@@ -9,6 +10,7 @@ use std::{
 use crate::{
     decompress::SupportedArchives,
     dmodman::{DmodMan, DMODMAN_EXTENSION},
+    installers::stdin::{Input, InputWithDefault},
     manifest::Manifest,
     mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::{create_table, Settings},
@@ -21,6 +23,7 @@ use clap::Parser;
 use comfy_table::{Cell, Color};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
+use read_stdin::prompt_until_ok;
 use thiserror::Error;
 
 use super::list::list_mods;
@@ -134,9 +137,9 @@ pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> R
         .map(|m| (m.bare_file_name().to_string(), m))
         .collect::<HashMap<_, _>>();
 
-    let mut table = create_table(vec!["Archive", "Status"]);
+    let mut table = create_table(vec!["Index", "Archive", "Status"]);
 
-    for (_, f) in sf {
+    for (idx, (_, f)) in sf.iter().enumerate() {
         let dmodman = DmodMan::try_from(download_dir.join(&f).add_extension("json")).ok();
         let archive = dmodman.as_ref().map_or_else(
             || f.with_extension("").as_str().to_lowercase(),
@@ -160,7 +163,8 @@ pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> R
         };
 
         table.add_row(vec![
-            Cell::new(f).fg(Color::White),
+            Cell::new(idx).fg(color),
+            Cell::new(f).fg(color),
             Cell::new(state).fg(color),
         ]);
     }
@@ -248,7 +252,17 @@ pub fn find_and_extract_archive(
     name: &str,
 ) -> Result<Option<Manifest>> {
     let sf = downloaded_files(download_dir)?;
-    if let Some((sa, f)) = find_archive_by_name(&sf, name) {
+    if let Some(idx) = name.parse::<usize>().ok() {
+        if let Some((sa, f)) = sf.get(idx).cloned() {
+            if extract_downloaded_file(download_dir, cache_dir, sa, f.as_path())? {
+                install_downloaded_file(cache_dir, &f).map(Some)
+            } else {
+                Ok(None)
+            }
+        } else {
+            Ok(None)
+        }
+    } else if let Some((sa, f)) = find_archive_by_name(&sf, name) {
         if extract_downloaded_file(download_dir, cache_dir, sa, f.as_path())? {
             install_downloaded_file(cache_dir, &f).map(Some)
         } else {
@@ -356,13 +370,51 @@ pub fn find_mod_by_name_fuzzy(
     }
 
     match_vec.sort_unstable_by(|(_, _, ia), (_, _, ib)| ia.cmp(ib));
+    let match_vec = match_vec
+        .iter()
+        .rev()
+        .enumerate()
+        .take_while(|(i, (_, _, mv))| *i <= 5 && *mv > 50)
+        .map(|(_, (sa, f, _))| (*(*sa), (*f).clone()))
+        .collect::<Vec<_>>();
 
-    if let Some((sa, f, score)) = match_vec.last() {
-        if *score > 80 {
-            Some((*(*sa), (*f).clone()))
+    if match_vec.len() == 0 {
+        match_vec.first().cloned()
+    } else if match_vec.len() > 0 {
+        let choice = if stdin().is_terminal() {
+            //TODO more color and stuff
+
+            log::info!(
+                "Multiple matches found; Please choose one: (Defaults to 0/'{}' on Enter)",
+                match_vec.first().unwrap().1
+            );
+            for (i, (_, f)) in match_vec.iter().enumerate() {
+                log::info!("{i}) {}", f);
+            }
+            log::info!("E) Exit");
+
+            loop {
+                let input: InputWithDefault = prompt_until_ok("Select : ");
+                match input {
+                    InputWithDefault::Input(Input::Exit) => {
+                        // return Err(InstallerError::InstallerCancelled(mod_name.to_string()).into())
+                        todo!()
+                    }
+                    InputWithDefault::Default => {
+                        break 0;
+                    }
+                    InputWithDefault::Input(Input::Digit(d)) => {
+                        if (d as usize) < match_vec.len() {
+                            break d as usize;
+                        }
+                    }
+                }
+            }
         } else {
-            None
-        }
+            0
+        };
+
+        match_vec.get(choice).cloned()
     } else {
         None
     }
