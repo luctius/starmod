@@ -295,9 +295,9 @@ impl Manifest {
     pub const fn is_enabled(&self) -> bool {
         self.mod_state().is_enabled()
     }
-    pub const fn is_disabled(&self) -> bool {
-        !self.mod_state().is_enabled()
-    }
+    // pub const fn is_disabled(&self) -> bool {
+    //     !self.mod_state().is_enabled()
+    // }
     pub const fn kind(&self) -> ModKind {
         self.mod_kind
     }

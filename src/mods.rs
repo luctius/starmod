@@ -179,7 +179,9 @@ impl ModList for &mut [Manifest] {
 
         log::debug!("Temp enabling all files in list");
         for m in self.iter_mut() {
-            m.temp_set_enabled();
+            if m.priority() >= 0 {
+                m.temp_set_enabled();
+            }
         }
 
         let conflict_list = conflict_list_by_file(self)?;
@@ -189,8 +191,7 @@ impl ModList for &mut [Manifest] {
         dbg!(&conflict_list);
         log::debug!("Collecting File List");
         for m in self.iter_mut() {
-            m.temp_set_enabled();
-            if m.priority() >= 0 {
+            if m.is_enabled() {
                 file_list.extend(m.enlist_files(&conflict_list)?);
             }
         }
