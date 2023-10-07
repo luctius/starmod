@@ -200,12 +200,12 @@ impl Manifest {
         self.write()
     }
     pub fn set_enabled(&mut self) -> Result<bool> {
-        if self.priority >= 0 {
-            self.mod_state = ModState::Enabled;
-            self.write().map(|_| true)
-        } else {
-            Ok(false)
+        let r = self.temp_set_enabled();
+        if r {
+            self.write()?;
         }
+
+        Ok(r)
     }
     pub fn temp_set_enabled(&mut self) -> bool {
         if self.priority >= 0 {
