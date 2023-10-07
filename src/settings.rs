@@ -9,45 +9,15 @@ use std::{
     fs::File,
     io::{BufReader, Read, Write},
 };
-use thiserror::Error;
 use xdg::BaseDirectories;
 
 use camino::{Utf8Path, Utf8PathBuf};
 use log::LevelFilter;
 
-use crate::{commands::game::RunCmd, dmodman::DModManConfig, game::Game};
+use crate::{commands::game::RunCmd, dmodman::DModManConfig, errors::SettingErrors, game::Game};
 
 const CONFIG_EXTENTION: &str = "ron";
 const EDITOR_ENV: &str = "EDITOR";
-
-#[allow(clippy::enum_variant_names)]
-#[derive(Error, Debug)]
-pub enum SettingErrors {
-    #[error("No valid config file could be found; Please run '{0} update-config' first.")]
-    ConfigNotFound(String),
-    #[error("The game directory for {0} cannot be found, Please run '{1} update-config' and provide manually.")]
-    NoGameDirFound(String, String),
-    #[error("A download directory for cannot be found, Please run '{0} update-config' and provide manually.")]
-    NoDownloadDirFound(String),
-    #[error(
-        "The cache directory cannot be found, Please run '{0} update-config' and provide manually."
-    )]
-    NoCacheDirFound(String),
-    #[error(
-        "The proton directory cannot be found, Please run '{0} update-config' and provide manually."
-    )]
-    NoProtonDirFound(String),
-    #[error(
-        "The compat directory cannot be found, Please run '{0} update-config' and provide manually."
-    )]
-    NoCompatDirFound(String),
-    #[error(
-        "The steam directory cannot be found, Please run '{0} update-config' and provide manually."
-    )]
-    NoSteamDirFound(String),
-    #[error("The executable could not be found: {0}.")]
-    ExecutableNotFound(Utf8PathBuf),
-}
 
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq, ValueEnum)]
 pub enum RunCmdKind {

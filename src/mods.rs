@@ -2,7 +2,7 @@ use std::{
     collections::HashSet,
     fmt::Display,
     fs::{self, read_link, remove_dir, remove_file, rename, DirBuilder},
-    io::{stdin, IsTerminal, Stdin},
+    io::{stdin, IsTerminal},
     sync::{Arc, Mutex},
 };
 
@@ -462,8 +462,7 @@ impl FindInModList for &[Manifest] {
                     let input: InputWithDefault = prompt_until_ok("Select : ");
                     match input {
                         InputWithDefault::Input(Input::Exit) => {
-                            // return Err(InstallerError::InstallerCancelled(mod_name.to_string()).into())
-                            todo!()
+                            return None?;
                         }
                         InputWithDefault::Default => {
                             break 0;

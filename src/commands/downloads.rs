@@ -10,6 +10,7 @@ use std::{
 use crate::{
     decompress::SupportedArchives,
     dmodman::{DmodMan, DMODMAN_EXTENSION},
+    errors::{DownloadError, ModErrors},
     installers::stdin::{Input, InputWithDefault},
     manifest::Manifest,
     mods::{FindInModList, GatherModList, ModKind, ModList},
@@ -24,15 +25,8 @@ use comfy_table::{Cell, Color};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use read_stdin::prompt_until_ok;
-use thiserror::Error;
 
 use super::list::list_mods;
-
-#[derive(Error, Debug)]
-pub enum DownloadError {
-    #[error("the archive {0} cannot be found.")]
-    ArchiveNotFound(String),
-}
 
 #[derive(Debug, Clone, Parser, Default)]
 pub enum DownloadCmd {
@@ -77,10 +71,11 @@ impl DownloadCmd {
                         mod_list[idx].manifest_dir(),
                     )?;
                     mod_type.create_mod(settings.cache_dir(), mod_list[idx].manifest_dir())?;
+                    Ok(())
                 } else {
-                    log::warn!("Mod '{name}' not found.");
+                    log::trace!("Mod '{name}' not found.");
+                    Err(ModErrors::ModNotFound(name).into())
                 }
-                Ok(())
             }
             Self::UpgradeAll => {
                 let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
@@ -275,6 +270,7 @@ pub fn find_and_extract_archive(
             Ok(None)
         }
     } else {
+        log::trace!("Archive {name} not found");
         Err(DownloadError::ArchiveNotFound(name.to_owned()).into())
     }
 }
@@ -397,8 +393,7 @@ pub fn find_mod_by_name_fuzzy(
                 let input: InputWithDefault = prompt_until_ok("Select : ");
                 match input {
                     InputWithDefault::Input(Input::Exit) => {
-                        // return Err(InstallerError::InstallerCancelled(mod_name.to_string()).into())
-                        todo!()
+                        return None?;
                     }
                     InputWithDefault::Default => {
                         break 0;

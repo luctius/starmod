@@ -3,18 +3,23 @@ use camino::Utf8PathBuf;
 use clap::Parser;
 use walkdir::WalkDir;
 
-use crate::settings::{LootType, SettingErrors, Settings};
+use crate::{
+    errors::{GameErrors, SettingErrors},
+    settings::{LootType, Settings},
+};
 
 #[derive(Clone, Debug, Parser)]
 pub enum GameCmd {
     /// Run 'cmd'; defaults to running the game.
     Run {
+        /// Command to run
         #[command(subcommand)]
         cmd: Option<RunCmd>,
     },
     /// Edit game config files using $EDITOR or 'xdg-open'.
     EditConfig {
-        #[arg(short, long)]
+        /// Name of the config-file to edit; If not supplied, all known files will be supplied to the editor.
+        /// Uses the $EDITOR as defined when the config file is created, or runs 'xdg-open'
         config_name: Option<String>,
     },
 }
@@ -114,6 +119,7 @@ impl RunCmd {
                             Err(SettingErrors::ExecutableNotFound(executable).into())
                         }
                     } else {
+                        //TODO: this should be an error, right?
                         println!("Proper Path not set, please update your configuration via 'starmod config update'");
                         Ok(())
                     }
@@ -181,6 +187,14 @@ fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> R
 
     if config_files_to_edit.is_empty() {
         log::info!("No relevant config files found.");
+        Err(GameErrors::ConfigNotFound(
+            config_files_to_edit
+                .iter()
+                .map(|p| p.to_string())
+                .collect::<Vec<_>>()
+                .join(","),
+        )
+        .into())
     } else {
         log::info!("Editing: {:?}", config_files_to_edit);
 
@@ -189,7 +203,7 @@ fn edit_game_config_files(settings: &Settings, config_name: Option<String>) -> R
             editor_cmd.arg(f);
         }
         editor_cmd.spawn()?.wait()?;
-    }
 
-    Ok(())
+        Ok(())
+    }
 }

@@ -33,6 +33,7 @@ mod decompress;
 use commands::Subcommands;
 mod conflict;
 mod dmodman;
+mod errors;
 mod game;
 mod installers;
 mod manifest;
@@ -44,7 +45,7 @@ mod utils;
 
 use settings::{LogLevel, Settings};
 
-use crate::settings::{create_table, SettingErrors};
+use crate::{errors::SettingErrors, settings::create_table};
 shadow!(build);
 
 /// Simple Starfield Modding Application
