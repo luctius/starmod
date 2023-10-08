@@ -11,7 +11,6 @@ use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use indicatif::{ProgressBar, ProgressStyle};
-use read_stdin::prompt_until_ok;
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
 
@@ -22,7 +21,6 @@ use crate::{
         data::create_data_manifest,
         fomod::{create_fomod_manifest, FOMOD_INFO_FILE, FOMOD_MODCONFIG_FILE},
         loader::create_loader_manifest,
-        stdin::{Input, InputWithDefault},
     },
     manifest::{Manifest, MANIFEST_EXTENSION},
     utils::AddExtension,
@@ -411,13 +409,14 @@ impl ModList for &mut [Manifest] {
 }
 
 pub trait FindInModList {
-    fn find_mod(&self, mod_name: &str) -> Option<usize>;
+    fn find_mod(&self, mod_name: Option<&str>) -> Option<usize>;
     fn find_mod_by_name(&self, name: &str) -> Option<usize>;
     fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize>;
+    fn select(&self) -> Option<usize>;
 }
 
 impl FindInModList for Vec<Manifest> {
-    fn find_mod(&self, mod_name: &str) -> Option<usize> {
+    fn find_mod(&self, mod_name: Option<&str>) -> Option<usize> {
         self.as_slice().find_mod(mod_name)
     }
     fn find_mod_by_name(&self, mod_name: &str) -> Option<usize> {
@@ -426,22 +425,35 @@ impl FindInModList for Vec<Manifest> {
     fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize> {
         self.as_slice().find_mod_by_name_fuzzy(fuzzy_name)
     }
+    fn select(&self) -> Option<usize> {
+        self.as_slice().select()
+    }
 }
 impl FindInModList for &[Manifest] {
-    fn find_mod(&self, mod_name: &str) -> Option<usize> {
+    fn find_mod(&self, mod_name: Option<&str>) -> Option<usize> {
         // check if this is an index,
         // if not, search by full name,
         // finally search fuzzy name
 
-        mod_name.parse::<usize>().map_or_else(
-            |_| {
-                self.find_mod_by_name(mod_name).map_or_else(
-                    || self.find_mod_by_name_fuzzy(mod_name),
-                    |idx| self.get(idx).map(|_| idx),
-                )
-            },
-            Some,
-        )
+        if let Some(mod_name) = mod_name {
+            mod_name.parse::<usize>().map_or_else(
+                |_| {
+                    self.find_mod_by_name(mod_name).map_or_else(
+                        || {
+                            if stdin().is_terminal() {
+                                self.find_mod_by_name_fuzzy(mod_name)
+                            } else {
+                                None
+                            }
+                        },
+                        |idx| self.get(idx).map(|_| idx),
+                    )
+                },
+                Some,
+            )
+        } else {
+            self.select()
+        }
     }
 
     fn find_mod_by_name(&self, name: &str) -> Option<usize> {
@@ -470,42 +482,48 @@ impl FindInModList for &[Manifest] {
         if match_vec.len() == 1 {
             match_vec.first().copied()
         } else if match_vec.len() > 1 {
-            let choice = if stdin().is_terminal() {
-                //TODO more color and stuff
+            let choices_vec = match_vec
+                .iter()
+                .map(|idx| (*idx, self[*idx].name()))
+                .collect::<Vec<_>>();
+            let names_vec = choices_vec.iter().map(|(_idx, n)| *n).collect::<Vec<_>>();
 
-                log::info!(
-                    "Multiple matches found; Please choose one: (Defaults to 0/'{}' on Enter)",
-                    self[match_vec[0]].name()
-                );
-                for (i, idx) in match_vec.iter().enumerate() {
-                    let name = self[*idx].name();
-                    log::info!("{i}) {}", name);
-                }
-                log::info!("E) Exit");
+            use inquire::{error::InquireError, Select};
 
-                loop {
-                    let input: InputWithDefault = prompt_until_ok("Select : ");
-                    match input {
-                        InputWithDefault::Input(Input::Exit) => {
-                            return None?;
-                        }
-                        InputWithDefault::Default => {
-                            break 0;
-                        }
-                        InputWithDefault::Input(Input::Digit(d)) => {
-                            if (d as usize) < match_vec.len() {
-                                break d as usize;
-                            }
-                        }
-                    }
-                }
-            } else {
-                0
-            };
+            let ans: Result<&str, InquireError> =
+                Select::new("Multiple options found, please specify:", names_vec).prompt();
 
-            match_vec.get(choice).copied()
+            match ans {
+                Ok(choice) => choices_vec
+                    .iter()
+                    .find_map(|(idx, n)| (choice == *n).then_some(*idx)),
+                Err(_) => None,
+            }
         } else {
             None
+        }
+    }
+    fn select(&self) -> Option<usize> {
+        let choices_vec = self
+            .iter()
+            .enumerate()
+            .map(|(idx, m)| (idx, m.name()))
+            .collect::<Vec<_>>();
+        let names_vec = choices_vec.iter().map(|(_idx, n)| *n).collect::<Vec<_>>();
+
+        use inquire::{error::InquireError, Select};
+
+        let ans: Result<&str, InquireError> =
+            Select::new("Multiple options found, please specify:", names_vec)
+                .with_page_size(20)
+                .with_vim_mode(true)
+                .prompt();
+
+        match ans {
+            Ok(choice) => choices_vec
+                .iter()
+                .find_map(|(idx, n)| (choice == *n).then_some(*idx)),
+            Err(_) => None,
         }
     }
 }

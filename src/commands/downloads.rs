@@ -39,10 +39,13 @@ pub enum DownloadCmd {
     /// Extract all archives which are not in the cache directory.
     ExtractAll,
     /// Re-install given archive
-    ReInstall { name: String },
+    ReInstall { name: Option<String> },
     /// Update all mods which have an archive in the archive directory with a newer version.
     #[clap(visible_alias = "update-all")]
     UpgradeAll,
+    /// Update mod which have an archive in the archive directory with a newer version.
+    #[clap(visible_alias = "update")]
+    Upgrade { name: String },
 }
 impl DownloadCmd {
     pub fn execute(self, settings: &Settings) -> Result<()> {
@@ -62,7 +65,7 @@ impl DownloadCmd {
             }
             Self::ReInstall { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(&name) {
+                if let Some(idx) = mod_list.find_mod(name.as_deref()) {
                     mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                     mod_list[idx].remove()?;
 
@@ -73,8 +76,8 @@ impl DownloadCmd {
                     mod_type.create_mod(settings.cache_dir(), mod_list[idx].manifest_dir())?;
                     Ok(())
                 } else {
-                    log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(name).into())
+                    // log::trace!("Mod '{name}' not found.");
+                    Err(ModErrors::ModNotFound(name.unwrap_or_default()).into())
                 }
             }
             Self::UpgradeAll => {
@@ -94,6 +97,7 @@ impl DownloadCmd {
                 });
 
                 for md in mod_list {
+                    //TODO Move this to manifest::upgrade
                     let priority = md.priority();
                     let enabled = md.is_enabled();
                     let name = dmodman_list
@@ -119,6 +123,40 @@ impl DownloadCmd {
                 }
 
                 list_mods(settings)
+            }
+            Self::Upgrade { name } => {
+                let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
+                let mod_list = Vec::gather_mods(settings.cache_dir())?;
+
+                if let Some(mod_idx) = mod_list.find_mod(Some(name).as_deref()) {
+                    let md = &mod_list[mod_idx];
+
+                    let dmodman = dmodman_list.iter().find(|dm| {
+                        dm.name() == md.name() && dm.mod_id() == md.nexus_id().unwrap_or_default()
+                    });
+
+                    if let Some(dmod) = dmodman {
+                        //TODO Move this to manifest::upgrade
+                        let priority = md.priority();
+                        let enabled = md.is_enabled();
+                        let name = dmod.file_name();
+
+                        log::info!("Updating '{name}'");
+                        md.remove()?;
+
+                        if let Some(mut manifest) = find_and_extract_archive(
+                            settings.download_dir(),
+                            settings.cache_dir(),
+                            name,
+                        )? {
+                            manifest.set_priority(priority)?;
+                            if enabled {
+                                manifest.set_enabled()?;
+                            }
+                        }
+                    }
+                }
+                Ok(())
             }
         }
     }
