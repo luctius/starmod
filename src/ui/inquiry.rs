@@ -8,8 +8,9 @@ mod sealed {
         fn prompt(self) -> inquire::error::InquireResult<Self::Output>;
     }
     pub struct InquireBuilder2<T, T2, I: InquireExt<T>, B: InquireExt<T2>> {
-        pub(super) inquire: I,
-        pub(super) next_inquire: B,
+        pub(super) test: Option<<B as InquireExt<T2>>::Output>,
+        pub(super) branch: I,
+        pub(super) leaf: B,
         pub(super) _p1: PhantomData<T>,
         pub(super) _p2: PhantomData<T2>,
     }
@@ -18,7 +19,7 @@ use inquire::error::InquireResult;
 use sealed::{InquireBuilder2, InquireExt};
 
 pub struct InquireBuilder<T, I: InquireExt<T>> {
-    test: Option<T>,
+    test: Option<<I as InquireExt<T>>::Output>,
     inquire: I,
     _p: PhantomData<T>,
 }
@@ -30,7 +31,7 @@ impl<T, I: InquireExt<T>> InquireBuilder<T, I> {
             _p: PhantomData,
         }
     }
-    pub fn new_with(test: Option<T>, inquire: I) -> Self {
+    pub fn new_with_test(test: Option<<I as InquireExt<T>>::Output>, inquire: I) -> Self {
         Self {
             test,
             inquire,
@@ -42,14 +43,32 @@ impl<T, I: InquireExt<T>> InquireBuilder<T, I> {
         next_inquire: B,
     ) -> InquireBuilder2<T, T2, InquireBuilder<T, I>, B> {
         InquireBuilder2 {
-            inquire: self,
-            next_inquire,
+            test: None,
+            branch: self,
+            leaf: next_inquire,
+            _p1: PhantomData,
+            _p2: PhantomData,
+        }
+    }
+    pub fn with_test<T2, B: InquireExt<T2>>(
+        self,
+        test: Option<<B as InquireExt<T2>>::Output>,
+        next_inquire: B,
+    ) -> InquireBuilder2<T, T2, InquireBuilder<T, I>, B> {
+        InquireBuilder2 {
+            test,
+            branch: self,
+            leaf: next_inquire,
             _p1: PhantomData,
             _p2: PhantomData,
         }
     }
     fn prompt(self) -> InquireResult<<I as InquireExt<T>>::Output> {
-        self.test.map(Ok).unwrap_or_else(self.inquire.prompt())
+        if let Some(test) = self.test {
+            Ok(test)
+        } else {
+            self.inquire.prompt()
+        }
     }
 }
 impl<T, I: InquireExt<T>> InquireExt<T> for InquireBuilder<T, I> {
@@ -66,8 +85,22 @@ impl<T, T2, I: InquireExt<T>, B: InquireExt<T2>> InquireBuilder2<T, T2, I, B> {
         next_inquire: B2,
     ) -> InquireBuilder2<(T, T2), T3, InquireBuilder2<T, T2, I, B>, B2> {
         InquireBuilder2 {
-            inquire: self,
-            next_inquire,
+            test: None,
+            branch: self,
+            leaf: next_inquire,
+            _p1: PhantomData,
+            _p2: PhantomData,
+        }
+    }
+    pub fn with_test<T3, B2: InquireExt<T3>>(
+        self,
+        test: Option<<B2 as InquireExt<T3>>::Output>,
+        next_inquire: B2,
+    ) -> InquireBuilder2<(T, T2), T3, InquireBuilder2<T, T2, I, B>, B2> {
+        InquireBuilder2 {
+            test,
+            branch: self,
+            leaf: next_inquire,
             _p1: PhantomData,
             _p2: PhantomData,
         }
@@ -75,8 +108,14 @@ impl<T, T2, I: InquireExt<T>, B: InquireExt<T2>> InquireBuilder2<T, T2, I, B> {
     fn prompt(
         self,
     ) -> InquireResult<(<I as InquireExt<T>>::Output, <B as InquireExt<T2>>::Output)> {
-        let t2 = self.next_inquire.prompt()?;
-        let t = self.inquire.prompt()?;
+        let t = self.branch.prompt()?;
+
+        let t2 = if let Some(test) = self.test {
+            test
+        } else {
+            self.leaf.prompt()?
+        };
+
         Ok((t, t2))
     }
 }
@@ -135,6 +174,18 @@ mod tests {
         let select =
             InquireBuilder::new(Select::new("What's your favorite fruit?", options.clone()))
                 .with(Select::new("What's your favorite fruit?", options));
+        let ans: Result<(&str, &str), InquireError> = select.prompt();
+    }
+
+    #[test]
+    pub fn test4() {
+        let options: Vec<&str> = vec!["Banana", "Apple"];
+
+        let test = Some("Apple");
+
+        let select =
+            InquireBuilder::new(Select::new("What's your favorite fruit?", options.clone()))
+                .with_test(test, Select::new("What's your favorite fruit?", options));
         let ans: Result<(&str, &str), InquireError> = select.prompt();
     }
 }
