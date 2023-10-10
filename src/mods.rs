@@ -412,7 +412,7 @@ impl ModList for &mut [Manifest] {
 pub trait FindInModList {
     fn find_mod(&self, mod_name: Option<&str>) -> Option<usize>;
     fn find_mod_by_name(&self, name: &str) -> Option<usize>;
-    fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize>;
+    // fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize>;
     fn select(&self) -> Option<usize>;
 }
 
@@ -423,9 +423,6 @@ impl FindInModList for Vec<Manifest> {
     fn find_mod_by_name(&self, mod_name: &str) -> Option<usize> {
         self.as_slice().find_mod_by_name(mod_name)
     }
-    fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize> {
-        self.as_slice().find_mod_by_name_fuzzy(fuzzy_name)
-    }
     fn select(&self) -> Option<usize> {
         self.as_slice().select()
     }
@@ -434,24 +431,11 @@ impl FindInModList for &[Manifest] {
     fn find_mod(&self, mod_name: Option<&str>) -> Option<usize> {
         // check if this is an index,
         // if not, search by full name,
-        // finally search fuzzy name
 
         if let Some(mod_name) = mod_name {
-            mod_name.parse::<usize>().map_or_else(
-                |_| {
-                    self.find_mod_by_name(mod_name).map_or_else(
-                        || {
-                            if stdin().is_terminal() {
-                                self.find_mod_by_name_fuzzy(mod_name)
-                            } else {
-                                None
-                            }
-                        },
-                        |idx| self.get(idx).map(|_| idx),
-                    )
-                },
-                Some,
-            )
+            mod_name
+                .parse::<usize>()
+                .map_or_else(|_| self.find_mod_by_name(mod_name), Some)
         } else {
             self.select()
         }
@@ -462,56 +446,49 @@ impl FindInModList for &[Manifest] {
             .enumerate()
             .find_map(|(idx, m)| (m.name() == name).then_some(idx))
     }
-    fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize> {
-        let matcher = SkimMatcherV2::default();
-        let mut match_vec = Vec::new();
+    // fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize> {
+    //     let matcher = SkimMatcherV2::default();
+    //     let mut match_vec = Vec::new();
 
-        self.iter().enumerate().for_each(|(idx, m)| {
-            let i = matcher.fuzzy_match(m.name(), fuzzy_name).unwrap_or(0);
-            match_vec.push((idx, i));
-        });
+    //     self.iter().enumerate().for_each(|(idx, m)| {
+    //         let i = matcher.fuzzy_match(m.name(), fuzzy_name).unwrap_or(0);
+    //         match_vec.push((idx, i));
+    //     });
 
-        match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
-        let match_vec = match_vec
-            .iter()
-            .rev()
-            .enumerate()
-            .take_while(|(i, (_, mv))| *i <= 5 && *mv > 50)
-            .map(|(_, (m, _))| *m)
-            .collect::<Vec<_>>();
+    //     match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
+    //     let match_vec = match_vec
+    //         .iter()
+    //         .rev()
+    //         .enumerate()
+    //         .take_while(|(i, (_, mv))| *i <= 5 && *mv > 50)
+    //         .map(|(_, (m, _))| *m)
+    //         .collect::<Vec<_>>();
 
-        if match_vec.len() == 1 {
-            match_vec.first().copied()
-        } else if match_vec.len() > 1 {
-            let choices_vec = match_vec
-                .iter()
-                .map(|idx| (*idx, self[*idx].name()))
-                .collect::<Vec<_>>();
-            let names_vec = choices_vec.iter().map(|(_idx, n)| *n).collect::<Vec<_>>();
+    //     if match_vec.len() == 1 {
+    //         match_vec.first().copied()
+    //     } else if match_vec.len() > 1 {
+    //         let choices_vec = match_vec
+    //             .iter()
+    //             .map(|idx| (*idx, self[*idx].name()))
+    //             .collect::<Vec<_>>();
+    //         let names_vec = choices_vec.iter().map(|(_idx, n)| *n).collect::<Vec<_>>();
 
-            use inquire::{error::InquireError, Select};
+    //         use inquire::{error::InquireError, Select};
 
-            let ans: Result<&str, InquireError> =
-                Select::new("Multiple options found, please specify:", names_vec).prompt();
+    //         let ans: Result<&str, InquireError> =
+    //             Select::new("Multiple options found, please specify:", names_vec).prompt();
 
-            match ans {
-                Ok(choice) => choices_vec
-                    .iter()
-                    .find_map(|(idx, n)| (choice == *n).then_some(*idx)),
-                Err(_) => None,
-            }
-        } else {
-            None
-        }
-    }
+    //         match ans {
+    //             Ok(choice) => choices_vec
+    //                 .iter()
+    //                 .find_map(|(idx, n)| (choice == *n).then_some(*idx)),
+    //             Err(_) => None,
+    //         }
+    //     } else {
+    //         None
+    //     }
+    // }
     fn select(&self) -> Option<usize> {
-        // let choices_vec = self
-        //     .iter()
-        //     .enumerate()
-        //     .map(|(idx, m)| (idx, m.name()))
-        //     .collect::<Vec<_>>();
-        // let names_vec = choices_vec.iter().map(|(_idx, n)| *n).collect::<Vec<_>>();
-
         let table = ModListBuilder::new(self)
             .with_index()
             .with_priority()

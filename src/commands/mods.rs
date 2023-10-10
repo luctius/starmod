@@ -15,6 +15,7 @@ use crate::{
     manifest::{install_file::SelectFile as _, Manifest},
     mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::{create_table, Settings},
+    ui::{InquireBuilder, ModListBuilder},
 };
 
 use super::list::list_mods;
@@ -385,13 +386,32 @@ impl ModCmd {
 
 fn show_mod(cache_dir: &Utf8Path, mod_name: Option<&str>) -> Result<()> {
     let mod_list = Vec::gather_mods(cache_dir)?;
-    if let Some(idx) = mod_list.find_mod(mod_name) {
-        show_mod_status(&mod_list, idx)?;
-        Ok(())
-    } else {
-        log::trace!("Mod '{}' could not be found", mod_name.unwrap_or_default());
-        Err(ModErrors::ModNotFound(mod_name.unwrap_or_default().to_string()).into())
-    }
+
+    let select = ModListBuilder::new(&mod_list)
+        .with_index()
+        .with_priority()
+        .with_status()
+        .with_version()
+        .with_nexus_id()
+        .with_mod_type()
+        .with_tags()
+        // .with_notes(settings.download_dir())
+        .with_colour()
+        // .with_headers()
+        .build()
+        .ok()?;
+
+    let idx = InquireBuilder::new_with_test(mod_list.find_mod(mod_name), select).prompt()?;
+
+    show_mod_status(&mod_list, idx)
+
+    // if let Some(idx) =  {
+    //     show_mod_status(&mod_list, idx)?;
+    //     Ok(())
+    // } else {
+    //     log::trace!("Mod '{}' could not be found", mod_name.unwrap_or_default());
+    //     Err(ModErrors::ModNotFound(mod_name.unwrap_or_default().to_string()).into())
+    // }
 }
 
 fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
