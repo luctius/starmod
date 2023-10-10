@@ -398,3 +398,13 @@ pub fn create_table(headers: Vec<&'static str>) -> Table {
         .set_header(headers);
     table
 }
+
+pub fn default_page_size() -> usize {
+    const MAX: usize = 50;
+    let h = term_size::dimensions_stdout().map(|d| d.1).unwrap_or(MAX);
+    if h > MAX {
+        MAX
+    } else {
+        h
+    }
+}

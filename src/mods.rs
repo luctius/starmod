@@ -9,7 +9,6 @@ use std::{
 
 use anyhow::{Context, Result};
 use camino::{Utf8Path, Utf8PathBuf};
-use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
 use walkdir::WalkDir;
@@ -23,7 +22,7 @@ use crate::{
         loader::create_loader_manifest,
     },
     manifest::{Manifest, MANIFEST_EXTENSION},
-    ui::ModListBuilder,
+    ui::{InquireBuilder, ModListBuilder, SelectToIdx},
     utils::AddExtension,
 };
 
@@ -410,86 +409,20 @@ impl ModList for &mut [Manifest] {
 }
 
 pub trait FindInModList {
-    fn find_mod(&self, mod_name: Option<&str>) -> Option<usize>;
+    fn find_mod(&self, mod_name: Option<&str>) -> Result<usize>;
     fn find_mod_by_name(&self, name: &str) -> Option<usize>;
-    // fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize>;
-    fn select(&self) -> Option<usize>;
+    fn select<'a>(&'a self) -> Result<SelectToIdx<'a, String>>;
 }
 
 impl FindInModList for Vec<Manifest> {
-    fn find_mod(&self, mod_name: Option<&str>) -> Option<usize> {
+    fn find_mod(&self, mod_name: Option<&str>) -> Result<usize> {
         self.as_slice().find_mod(mod_name)
     }
     fn find_mod_by_name(&self, mod_name: &str) -> Option<usize> {
         self.as_slice().find_mod_by_name(mod_name)
     }
-    fn select(&self) -> Option<usize> {
-        self.as_slice().select()
-    }
-}
-impl FindInModList for &[Manifest] {
-    fn find_mod(&self, mod_name: Option<&str>) -> Option<usize> {
-        // check if this is an index,
-        // if not, search by full name,
-
-        if let Some(mod_name) = mod_name {
-            mod_name
-                .parse::<usize>()
-                .map_or_else(|_| self.find_mod_by_name(mod_name), Some)
-        } else {
-            self.select()
-        }
-    }
-
-    fn find_mod_by_name(&self, name: &str) -> Option<usize> {
-        self.iter()
-            .enumerate()
-            .find_map(|(idx, m)| (m.name() == name).then_some(idx))
-    }
-    // fn find_mod_by_name_fuzzy(&self, fuzzy_name: &str) -> Option<usize> {
-    //     let matcher = SkimMatcherV2::default();
-    //     let mut match_vec = Vec::new();
-
-    //     self.iter().enumerate().for_each(|(idx, m)| {
-    //         let i = matcher.fuzzy_match(m.name(), fuzzy_name).unwrap_or(0);
-    //         match_vec.push((idx, i));
-    //     });
-
-    //     match_vec.sort_unstable_by(|(_, ia), (_, ib)| ia.cmp(ib));
-    //     let match_vec = match_vec
-    //         .iter()
-    //         .rev()
-    //         .enumerate()
-    //         .take_while(|(i, (_, mv))| *i <= 5 && *mv > 50)
-    //         .map(|(_, (m, _))| *m)
-    //         .collect::<Vec<_>>();
-
-    //     if match_vec.len() == 1 {
-    //         match_vec.first().copied()
-    //     } else if match_vec.len() > 1 {
-    //         let choices_vec = match_vec
-    //             .iter()
-    //             .map(|idx| (*idx, self[*idx].name()))
-    //             .collect::<Vec<_>>();
-    //         let names_vec = choices_vec.iter().map(|(_idx, n)| *n).collect::<Vec<_>>();
-
-    //         use inquire::{error::InquireError, Select};
-
-    //         let ans: Result<&str, InquireError> =
-    //             Select::new("Multiple options found, please specify:", names_vec).prompt();
-
-    //         match ans {
-    //             Ok(choice) => choices_vec
-    //                 .iter()
-    //                 .find_map(|(idx, n)| (choice == *n).then_some(*idx)),
-    //             Err(_) => None,
-    //         }
-    //     } else {
-    //         None
-    //     }
-    // }
-    fn select(&self) -> Option<usize> {
-        let table = ModListBuilder::new(self)
+    fn select<'a>(&'a self) -> Result<SelectToIdx<'a, String>> {
+        let list = ModListBuilder::new(self)
             .with_index()
             .with_priority()
             .with_status()
@@ -500,24 +433,60 @@ impl FindInModList for &[Manifest] {
             // .with_notes(settings.download_dir())
             .with_colour()
             // .with_headers()
-            .build()
-            .ok()?;
+            .build()?;
 
-        use inquire::{error::InquireError, Select};
-
-        let ans: Result<String, InquireError> =
-            Select::new("Multiple options found, please specify:", table.clone())
-                .with_page_size(50)
+        Ok(
+            SelectToIdx::new("Multiple options found, please specify:", list)
                 .with_vim_mode(true)
-                .prompt();
+                .with_help_message("Please select a mod."),
+        )
+    }
+}
+impl FindInModList for &[Manifest] {
+    fn find_mod(&self, mod_name: Option<&str>) -> Result<usize> {
+        // check if this is an index,
+        // if not, search by full name,
 
-        match ans {
-            Ok(choice) => table
-                .iter()
-                // .skip(1)
-                .enumerate()
-                .find_map(|(idx, n)| (choice == *n).then_some(idx)),
-            Err(_) => None,
-        }
+        let idx = if let Some(mod_name) = mod_name {
+            mod_name
+                .parse::<usize>()
+                .map_or_else(|_| self.find_mod_by_name(mod_name), Some)
+        } else {
+            None
+        };
+
+        InquireBuilder::new_with_test(
+            idx,
+            self.select()?
+                .with_starting_filter_input(mod_name.unwrap_or_default()),
+        )
+        .prompt()
+        .map_err(|e| e.into())
+    }
+
+    fn find_mod_by_name(&self, name: &str) -> Option<usize> {
+        self.iter()
+            .enumerate()
+            .find_map(|(idx, m)| (m.name() == name).then_some(idx))
+    }
+    fn select<'a>(&'a self) -> Result<SelectToIdx<'a, String>> {
+        let list = ModListBuilder::new(self)
+            .with_index()
+            .with_priority()
+            .with_status()
+            .with_version()
+            .with_nexus_id()
+            .with_mod_type()
+            .with_tags()
+            // .with_notes(settings.download_dir())
+            .with_colour()
+            // .with_headers()
+            .build()?;
+
+        Ok(
+            SelectToIdx::new("Multiple options found, please specify:", list)
+                .with_vim_mode(true)
+                .with_help_message("Please select a mod."),
+        )
     }
 }

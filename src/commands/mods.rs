@@ -15,7 +15,6 @@ use crate::{
     manifest::{install_file::SelectFile as _, Manifest},
     mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::{create_table, Settings},
-    ui::{InquireBuilder, ModListBuilder},
 };
 
 use super::list::list_mods;
@@ -138,13 +137,9 @@ impl ModCmd {
         match self {
             Self::Disable { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(name.as_deref()) {
-                    mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
-                    list_mods(settings)
-                } else {
-                    // log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(name.unwrap_or_default()).into())
-                }
+                let idx = mod_list.find_mod(name.as_deref())?;
+                mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
+                list_mods(settings)
             }
             Self::DisableAll => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
@@ -156,40 +151,32 @@ impl ModCmd {
                 file,
             } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(mod_name.as_deref()) {
-                    let file_name = if let Some(file) = file {
-                        file
-                    } else {
-                        mod_list[idx]
-                            .files()?
-                            .select()
-                            .unwrap_or_default()
-                            .to_string()
-                    };
-
-                    if mod_list[idx].disable_file(&file_name) {
-                        if mod_list[idx].is_enabled() {
-                            mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
-                        }
-                        Ok(())
-                    } else {
-                        // log::trace!("File '{file_name}' not found within mod '{mod_name}'.");
-                        Err(ModErrors::FileNotFound(mod_name.unwrap_or_default(), file_name).into())
-                    }
+                let idx = mod_list.find_mod(mod_name.as_deref())?;
+                let file_name = if let Some(file) = file {
+                    file
                 } else {
-                    // log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(mod_name.unwrap_or_default()).into())
+                    mod_list[idx]
+                        .files()?
+                        .select()
+                        .unwrap_or_default()
+                        .to_string()
+                };
+
+                if mod_list[idx].disable_file(&file_name) {
+                    if mod_list[idx].is_enabled() {
+                        mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
+                    }
+                    Ok(())
+                } else {
+                    // log::trace!("File '{file_name}' not found within mod '{mod_name}'.");
+                    Err(ModErrors::FileNotFound(mod_name.unwrap_or_default(), file_name).into())
                 }
             }
             Self::Enable { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(name.as_deref()) {
-                    mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
-                    list_mods(settings)
-                } else {
-                    // log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(name.unwrap_or_default()).into())
-                }
+                let idx = mod_list.find_mod(name.as_deref())?;
+                mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
+                list_mods(settings)
             }
             Self::EnableAll => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
@@ -234,91 +221,71 @@ impl ModCmd {
             }
             Self::Remove { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(name.as_deref()) {
-                    mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
-                    mod_list[idx].remove()?;
-                    log::info!("Removed mod '{}'", mod_list[idx].name());
-                    list_mods(settings)
-                } else {
-                    // log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(name.unwrap_or_default()).into())
-                }
+                let idx = mod_list.find_mod(name.as_deref())?;
+                mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
+                mod_list[idx].remove()?;
+                log::info!("Removed mod '{}'", mod_list[idx].name());
+                list_mods(settings)
             }
             Self::Rename {
                 old_mod_name,
                 new_mod_name,
             } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(old_mod_name.as_deref()) {
-                    mod_list[idx].set_name(new_mod_name)?;
-                    list_mods(settings)
-                } else {
-                    // log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(old_mod_name.unwrap_or_default()).into())
-                }
+                let idx = mod_list.find_mod(old_mod_name.as_deref())?;
+                mod_list[idx].set_name(new_mod_name)?;
+                list_mods(settings)
             }
             Self::SetPriority { name, priority } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(name.as_deref()) {
-                    let old_prio = mod_list[idx].priority();
+                let idx = mod_list.find_mod(name.as_deref())?;
+                let old_prio = mod_list[idx].priority();
 
-                    let priority = if let Some(priority) = priority {
+                let priority = if let Some(priority) = priority {
+                    priority
+                } else {
+                    CustomType::new("Please specify the new priority")
+                        // .with_formatter(&|i| format!("${}", i))
+                        .with_error_message("Please type a valid number")
+                        .with_help_message("Type in a positive or negative number.")
+                        .prompt()?
+                };
+
+                mod_list[idx].set_priority(priority)?;
+                if mod_list[idx].is_disabled() {
+                    let priority = if priority > old_prio {
                         priority
                     } else {
-                        CustomType::new("Please specify the new priority")
-                            // .with_formatter(&|i| format!("${}", i))
-                            .with_error_message("Please type a valid number")
-                            .with_help_message("Type in a positive or negative number.")
-                            .prompt()?
+                        old_prio
                     };
 
-                    mod_list[idx].set_priority(priority)?;
-                    if mod_list[idx].is_disabled() {
-                        let priority = if priority > old_prio {
-                            priority
-                        } else {
-                            old_prio
-                        };
-
-                        (&mut mod_list[0..priority as usize])
-                            .re_enable(settings.cache_dir(), settings.game_dir())?;
-                    }
-
-                    crate::commands::list::list_mods(settings)?;
-                    Ok(())
-                } else {
-                    // log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(name.unwrap_or_default()).into())
+                    (&mut mod_list[0..priority as usize])
+                        .re_enable(settings.cache_dir(), settings.game_dir())?;
                 }
+
+                crate::commands::list::list_mods(settings)?;
+                Ok(())
             }
             Self::TagAdd { name, tag } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(name.as_deref()) {
-                    if mod_list[idx].add_tag(&tag)? {
-                        // log::info!("Added tag {tag} to mod {name}.");
-                        Ok(())
-                    } else {
-                        // log::trace!("Unable to add tag {tag} to mod {name}.");
-                        Err(ModErrors::DuplicateTag(name.unwrap_or_default(), tag).into())
-                    }
+                let idx = mod_list.find_mod(name.as_deref())?;
+                if mod_list[idx].add_tag(&tag)? {
+                    // log::info!("Added tag {tag} to mod {name}.");
+                    Ok(())
                 } else {
-                    // log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(name.unwrap_or_default()).into())
+                    // log::trace!("Unable to add tag {tag} to mod {name}.");
+                    Err(ModErrors::DuplicateTag(name.unwrap_or_default(), tag).into())
                 }
             }
             Self::TagRemove { name, tag } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(name.as_deref()) {
-                    if mod_list[idx].remove_tag(&tag)? {
-                        // log::info!("Removed tag {tag} from mod {name}.");
-                        Ok(())
-                    } else {
-                        // log::trace!("Unable to remove tag {tag} from mod {name}.");
-                        Err(ModErrors::TagNotFound(name.unwrap_or_default(), tag).into())
-                    }
+                let idx = mod_list.find_mod(name.as_deref())?;
+                if mod_list[idx].remove_tag(&tag)? {
+                    // log::info!("Removed tag {tag} from mod {name}.");
+                    Ok(())
                 } else {
-                    // log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(name.unwrap_or_default()).into())
+                    // log::trace!("Unable to remove tag {tag} from mod {name}.");
+                    Err(ModErrors::TagNotFound(name.unwrap_or_default(), tag).into())
                 }
             }
             Self::CopyToCustom {
@@ -327,57 +294,48 @@ impl ModCmd {
                 file,
             } => {
                 let mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(origin_idx) = mod_list.find_mod(origin_mod.as_deref()) {
-                    if let Some(custom_idx) = mod_list.find_mod(custom_mod.as_deref()) {
-                        //TODO check that custom_mod is indeed a custom mod
-                        let file_name = if let Some(file) = file {
-                            file
-                        } else {
-                            mod_list[origin_idx]
-                                .files()?
-                                .select()
-                                .unwrap_or_default()
-                                .to_string()
-                        };
-
-                        if let Some(file) = mod_list[origin_idx]
-                            .origin_files()?
-                            .iter()
-                            .find(|f| f.file_name().unwrap().eq(&file_name))
-                        {
-                            let origin = settings.cache_dir().join(file);
-                            let destination = settings
-                                .cache_dir()
-                                .join(mod_list[custom_idx].manifest_dir())
-                                .join(
-                                    file.strip_prefix(mod_list[origin_idx].manifest_dir())
-                                        .unwrap(),
-                                );
-
-                            DirBuilder::new()
-                                .recursive(true)
-                                .create(destination.parent().unwrap())?;
-                            copy(origin, destination)?;
-                            Ok(())
-                        } else {
-                            // log::trace!(
-                            //     "File '{}' could not be found in mod '{}'.",
-                            //     file_name,
-                            //     mod_list[origin_idx].name()
-                            // );
-                            Err(ModErrors::FileNotFound(
-                                mod_list[origin_idx].name().to_string(),
-                                file_name,
-                            )
-                            .into())
-                        }
-                    } else {
-                        // log::trace!("Mod '{}' could not be found", custom_mod);
-                        Err(ModErrors::ModNotFound(custom_mod.unwrap_or_default()).into())
-                    }
+                let origin_idx = mod_list.find_mod(origin_mod.as_deref())?;
+                let custom_idx = mod_list.find_mod(custom_mod.as_deref())?;
+                //TODO check that custom_mod is indeed a custom mod
+                let file_name = if let Some(file) = file {
+                    file
                 } else {
-                    // log::trace!("Mod '{}' could not be found", origin_mod);
-                    Err(ModErrors::ModNotFound(origin_mod.unwrap_or_default()).into())
+                    mod_list[origin_idx]
+                        .files()?
+                        .select()
+                        .unwrap_or_default()
+                        .to_string()
+                };
+
+                if let Some(file) = mod_list[origin_idx]
+                    .origin_files()?
+                    .iter()
+                    .find(|f| f.file_name().unwrap().eq(&file_name))
+                {
+                    let origin = settings.cache_dir().join(file);
+                    let destination = settings
+                        .cache_dir()
+                        .join(mod_list[custom_idx].manifest_dir())
+                        .join(
+                            file.strip_prefix(mod_list[origin_idx].manifest_dir())
+                                .unwrap(),
+                        );
+
+                    DirBuilder::new()
+                        .recursive(true)
+                        .create(destination.parent().unwrap())?;
+                    copy(origin, destination)?;
+                    Ok(())
+                } else {
+                    // log::trace!(
+                    //     "File '{}' could not be found in mod '{}'.",
+                    //     file_name,
+                    //     mod_list[origin_idx].name()
+                    // );
+                    Err(
+                        ModErrors::FileNotFound(mod_list[origin_idx].name().to_string(), file_name)
+                            .into(),
+                    )
                 }
             }
         }
@@ -387,31 +345,25 @@ impl ModCmd {
 fn show_mod(cache_dir: &Utf8Path, mod_name: Option<&str>) -> Result<()> {
     let mod_list = Vec::gather_mods(cache_dir)?;
 
-    let select = ModListBuilder::new(&mod_list)
-        .with_index()
-        .with_priority()
-        .with_status()
-        .with_version()
-        .with_nexus_id()
-        .with_mod_type()
-        .with_tags()
-        // .with_notes(settings.download_dir())
-        .with_colour()
-        // .with_headers()
-        .build()
-        .ok()?;
+    // let list = ModListBuilder::new(&mod_list)
+    //     .with_priority()
+    //     .with_status()
+    //     .with_version()
+    //     .with_nexus_id()
+    //     .with_mod_type()
+    //     .with_tags()
+    //     // .with_notes(settings.download_dir())
+    //     .with_colour()
+    //     .build()?;
 
-    let idx = InquireBuilder::new_with_test(mod_list.find_mod(mod_name), select).prompt()?;
+    // let select = SelectToIdx::new("bla", list)
+    //     .with_starting_filter_input(mod_name.unwrap_or_default())
+    //     .with_vim_mode(true);
 
+    // let idx = InquireBuilder::new_with_test(mod_list.find_mod(mod_name), select).prompt()?;
+
+    let idx = mod_list.find_mod(mod_name)?;
     show_mod_status(&mod_list, idx)
-
-    // if let Some(idx) =  {
-    //     show_mod_status(&mod_list, idx)?;
-    //     Ok(())
-    // } else {
-    //     log::trace!("Mod '{}' could not be found", mod_name.unwrap_or_default());
-    //     Err(ModErrors::ModNotFound(mod_name.unwrap_or_default().to_string()).into())
-    // }
 }
 
 fn show_mod_status(mod_list: &[Manifest], idx: usize) -> Result<()> {
@@ -507,17 +459,12 @@ fn edit_mod_config_files(
     extension: &Option<String>,
 ) -> Result<()> {
     let mod_list = Vec::gather_mods(settings.cache_dir())?;
-    let mod_idx = mod_list.find_mod(name);
+    let mod_idx = mod_list.find_mod(name)?;
 
-    if mod_idx.is_none() {
-        log::trace!("Source mod '{}' not found.", name.unwrap_or_default());
-        return Err(ModErrors::ModNotFound(name.unwrap_or_default().to_string()))?;
-    }
+    let name = mod_list[mod_idx].name();
 
-    let name = mod_list[mod_idx.unwrap()].name();
-
-    let config_files_to_edit = if let Some(idx) = mod_idx {
-        let manifest = &mod_list[idx];
+    let config_files_to_edit = {
+        let manifest = &mod_list[mod_idx];
         let config_list = manifest.find_config_files(extension.as_deref())?;
         if let Some(config_name) = config_name {
             if let Some(cf) = config_list
@@ -543,37 +490,35 @@ fn edit_mod_config_files(
             }
             list
         }
-    } else {
-        Vec::new()
     };
 
     if !config_files_to_edit.is_empty() {
         let mut editor_cmd = std::process::Command::new(settings.editor());
-        if let Some(destination_mod_name) = destination_mod_name {
-            // Copy
-            if let Some(idx) = mod_list.find_mod(destination_mod_name.as_deref()) {
-                let manifest = &mod_list[idx];
+        // if let Some(destination_mod_name) = destination_mod_name {
+        //     // Copy
+        //     if let Some(idx) = mod_list.find_mod(destination_mod_name.as_deref()) {
+        //         let manifest = &mod_list[idx];
 
-                for (source, dest) in &config_files_to_edit {
-                    let dest = settings
-                        .cache_dir()
-                        .join(manifest.manifest_dir())
-                        .join(dest);
-                    log::trace!("Copying config file {} to {}", source, &dest);
+        //         for (source, dest) in &config_files_to_edit {
+        //             let dest = settings
+        //                 .cache_dir()
+        //                 .join(manifest.manifest_dir())
+        //                 .join(dest);
+        //             log::trace!("Copying config file {} to {}", source, &dest);
 
-                    DirBuilder::new()
-                        .recursive(true)
-                        .create(dest.parent().unwrap())?;
+        //             DirBuilder::new()
+        //                 .recursive(true)
+        //                 .create(dest.parent().unwrap())?;
 
-                    copy(source, &dest)?;
-                    let _ = editor_cmd.arg(dest);
-                }
-            }
-        } else {
-            for (source, _) in &config_files_to_edit {
-                let _ = editor_cmd.arg(source);
-            }
+        //             copy(source, &dest)?;
+        //             let _ = editor_cmd.arg(dest);
+        //         }
+        //     }
+        // } else {
+        for (source, _) in &config_files_to_edit {
+            let _ = editor_cmd.arg(source);
         }
+        // }
 
         log::info!("Running '{:?}'", editor_cmd);
 

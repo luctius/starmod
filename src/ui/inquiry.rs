@@ -7,6 +7,7 @@ mod sealed {
         type Output;
         fn prompt(self) -> inquire::error::InquireResult<Self::Output>;
     }
+
     pub struct InquireBuilder2<T, T2, I: InquireExt<T>, B: InquireExt<T2>> {
         pub(super) test: Option<<B as InquireExt<T2>>::Output>,
         pub(super) branch: I,
@@ -17,6 +18,8 @@ mod sealed {
 }
 use inquire::error::InquireResult;
 use sealed::{InquireBuilder2, InquireExt};
+
+use crate::{errors::ModErrors, settings::default_page_size};
 
 pub struct InquireBuilder<T, I: InquireExt<T>> {
     test: Option<<I as InquireExt<T>>::Output>,
@@ -63,7 +66,7 @@ impl<T, I: InquireExt<T>> InquireBuilder<T, I> {
             _p2: PhantomData,
         }
     }
-    fn prompt(self) -> InquireResult<<I as InquireExt<T>>::Output> {
+    pub fn prompt(self) -> InquireResult<<I as InquireExt<T>>::Output> {
         if let Some(test) = self.test {
             Ok(test)
         } else {
@@ -75,7 +78,7 @@ impl<T, I: InquireExt<T>> InquireExt<T> for InquireBuilder<T, I> {
     type Output = <I as InquireExt<T>>::Output;
 
     fn prompt(self) -> InquireResult<Self::Output> {
-        self.inquire.prompt()
+        self.prompt()
     }
 }
 
@@ -105,7 +108,7 @@ impl<T, T2, I: InquireExt<T>, B: InquireExt<T2>> InquireBuilder2<T, T2, I, B> {
             _p2: PhantomData,
         }
     }
-    fn prompt(
+    pub fn prompt(
         self,
     ) -> InquireResult<(<I as InquireExt<T>>::Output, <B as InquireExt<T2>>::Output)> {
         let t = self.branch.prompt()?;
@@ -137,6 +140,14 @@ impl<'a, T: Display> InquireExt<T> for inquire::Select<'a, T> {
     }
 }
 
+impl<'a, T: Display + Clone> InquireExt<T> for inquire::CustomType<'a, T> {
+    type Output = T;
+
+    fn prompt(self) -> InquireResult<Self::Output> {
+        inquire::CustomType::prompt(self)
+    }
+}
+
 impl<'a, T: Display> InquireExt<T> for inquire::MultiSelect<'a, T> {
     type Output = Vec<T>;
 
@@ -145,47 +156,116 @@ impl<'a, T: Display> InquireExt<T> for inquire::MultiSelect<'a, T> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use inquire::{InquireError, Select};
-
-    use super::InquireBuilder;
-
-    #[test]
-    pub fn test() {
-        let options: Vec<&str> = vec!["Banana", "Apple"];
-
-        let select = Select::new("What's your favorite fruit?", options);
-        let ans: Result<&str, InquireError> = select.prompt();
-    }
-
-    #[test]
-    pub fn test2() {
-        let options: Vec<&str> = vec!["Banana", "Apple"];
-
-        let select = InquireBuilder::new(Select::new("What's your favorite fruit?", options));
-        let ans: Result<&str, InquireError> = select.prompt();
-    }
-
-    #[test]
-    pub fn test3() {
-        let options: Vec<&str> = vec!["Banana", "Apple"];
-
+pub struct SelectToIdx<'a, T> {
+    list: Vec<T>,
+    select: inquire::Select<'a, T>,
+}
+impl<'a, T: Display + Clone> SelectToIdx<'a, T> {
+    pub fn new(message: &'a str, list: Vec<T>) -> Self {
         let select =
-            InquireBuilder::new(Select::new("What's your favorite fruit?", options.clone()))
-                .with(Select::new("What's your favorite fruit?", options));
-        let ans: Result<(&str, &str), InquireError> = select.prompt();
+            inquire::Select::new(message, list.to_vec()).with_page_size(default_page_size());
+        Self { list, select }
     }
+    // pub fn new_with(select: inquire::Select<'a, T>, list: &'a [T]) -> Self {
+    //     Self { list, select }
+    // }
+    pub fn with_starting_filter_input(mut self, starting_filter_input: &'a str) -> Self {
+        self.select = self
+            .select
+            .with_starting_filter_input(starting_filter_input);
+        self
+    }
+    pub fn with_vim_mode(mut self, vim_mode: bool) -> Self {
+        self.select = self.select.with_vim_mode(vim_mode);
+        self
+    }
+    pub fn with_page_size(mut self, page_size: usize) -> Self {
+        self.select = self.select.with_page_size(page_size);
+        self
+    }
+    pub fn with_help_message(mut self, message: &'a str) -> Self {
+        self.select = self.select.with_help_message(message);
+        self
+    }
+}
+impl<'a, T: Display + Clone + PartialEq> SelectToIdx<'a, T> {
+    pub fn prompt(self) -> InquireResult<<Self as InquireExt<T>>::Output> {
+        let choice = self.select.prompt()?;
 
-    #[test]
-    pub fn test4() {
-        let options: Vec<&str> = vec!["Banana", "Apple"];
+        self.list
+            .iter()
+            .enumerate()
+            .find_map(|(idx, t)| (choice == *t).then_some(idx))
+            .ok_or_else(|| {
+                inquire::InquireError::Custom(Box::new(ModErrors::ModNotFound(String::new())))
+            })
+    }
+}
+impl<'a, T: Display + Clone + PartialEq> InquireExt<T> for SelectToIdx<'a, T> {
+    type Output = usize;
 
-        let test = Some("Apple");
+    fn prompt(self) -> InquireResult<Self::Output> {
+        self.prompt()
+    }
+}
 
+pub struct MultiSelectToIdx<'a, T> {
+    list: Vec<T>,
+    select: inquire::MultiSelect<'a, T>,
+}
+impl<'a, T: Display + Clone> MultiSelectToIdx<'a, T> {
+    pub fn new(message: &'a str, list: Vec<T>) -> Self {
         let select =
-            InquireBuilder::new(Select::new("What's your favorite fruit?", options.clone()))
-                .with_test(test, Select::new("What's your favorite fruit?", options));
-        let ans: Result<(&str, &str), InquireError> = select.prompt();
+            inquire::MultiSelect::new(message, list.to_vec()).with_page_size(default_page_size());
+        Self { list, select }
+    }
+    // pub fn new_with(select: inquire::Select<'a, T>, list: &'a [T]) -> Self {
+    //     Self { list, select }
+    // }
+    // pub fn with_starting_filter_input(mut self, starting_filter_input: &'a str) -> Self {
+    //     self.select = self
+    //         .select
+    //         .with_starting_filter_input(starting_filter_input);
+    //     self
+    // }
+    pub fn with_vim_mode(mut self, vim_mode: bool) -> Self {
+        self.select = self.select.with_vim_mode(vim_mode);
+        self
+    }
+    pub fn with_page_size(mut self, page_size: usize) -> Self {
+        self.select = self.select.with_page_size(page_size);
+        self
+    }
+    pub fn with_help_message(mut self, message: &'a str) -> Self {
+        self.select = self.select.with_help_message(message);
+        self
+    }
+}
+impl<'a, T: Display + Clone + PartialEq> MultiSelectToIdx<'a, T> {
+    pub fn prompt(self) -> InquireResult<<Self as InquireExt<T>>::Output> {
+        let choice = self.select.prompt()?;
+
+        let mut idx_list = Vec::with_capacity(choice.len());
+
+        for c in choice {
+            let idx = self
+                .list
+                .iter()
+                .enumerate()
+                .find_map(|(idx, t)| (c == *t).then_some(idx))
+                .ok_or_else(|| {
+                    inquire::InquireError::Custom(Box::new(ModErrors::ModNotFound(String::new())))
+                })?;
+            idx_list.push(idx);
+        }
+
+        Ok(idx_list)
+    }
+}
+impl<'a, T: Display + Clone + PartialEq> InquireExt<T> for MultiSelectToIdx<'a, T> {
+    type Output = Vec<usize>;
+
+    fn prompt(self) -> InquireResult<Self::Output> {
+        self.prompt()
     }
 }

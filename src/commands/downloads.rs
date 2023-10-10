@@ -65,20 +65,14 @@ impl DownloadCmd {
             }
             Self::ReInstall { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                if let Some(idx) = mod_list.find_mod(name.as_deref()) {
-                    mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
-                    mod_list[idx].remove()?;
+                let idx = mod_list.find_mod(name.as_deref())?;
+                mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
+                mod_list[idx].remove()?;
 
-                    let mod_type = ModKind::detect_mod_type(
-                        settings.cache_dir(),
-                        mod_list[idx].manifest_dir(),
-                    )?;
-                    mod_type.create_mod(settings.cache_dir(), mod_list[idx].manifest_dir())?;
-                    Ok(())
-                } else {
-                    // log::trace!("Mod '{name}' not found.");
-                    Err(ModErrors::ModNotFound(name.unwrap_or_default()).into())
-                }
+                let mod_type =
+                    ModKind::detect_mod_type(settings.cache_dir(), mod_list[idx].manifest_dir())?;
+                mod_type.create_mod(settings.cache_dir(), mod_list[idx].manifest_dir())?;
+                Ok(())
             }
             Self::UpgradeAll => {
                 let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
@@ -128,31 +122,30 @@ impl DownloadCmd {
                 let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
                 let mod_list = Vec::gather_mods(settings.cache_dir())?;
 
-                if let Some(mod_idx) = mod_list.find_mod(Some(name).as_deref()) {
-                    let md = &mod_list[mod_idx];
+                let mod_idx = mod_list.find_mod(Some(&name))?;
+                let md = &mod_list[mod_idx];
 
-                    let dmodman = dmodman_list.iter().find(|dm| {
-                        dm.name() == md.name() && dm.mod_id() == md.nexus_id().unwrap_or_default()
-                    });
+                let dmodman = dmodman_list.iter().find(|dm| {
+                    dm.name() == md.name() && dm.mod_id() == md.nexus_id().unwrap_or_default()
+                });
 
-                    if let Some(dmod) = dmodman {
-                        //TODO Move this to manifest::upgrade
-                        let priority = md.priority();
-                        let enabled = md.is_enabled();
-                        let name = dmod.file_name();
+                if let Some(dmod) = dmodman {
+                    //TODO Move this to manifest::upgrade
+                    let priority = md.priority();
+                    let enabled = md.is_enabled();
+                    let name = dmod.file_name();
 
-                        log::info!("Updating '{name}'");
-                        md.remove()?;
+                    log::info!("Updating '{name}'");
+                    md.remove()?;
 
-                        if let Some(mut manifest) = find_and_extract_archive(
-                            settings.download_dir(),
-                            settings.cache_dir(),
-                            name,
-                        )? {
-                            manifest.set_priority(priority)?;
-                            if enabled {
-                                manifest.set_enabled()?;
-                            }
+                    if let Some(mut manifest) = find_and_extract_archive(
+                        settings.download_dir(),
+                        settings.cache_dir(),
+                        name,
+                    )? {
+                        manifest.set_priority(priority)?;
+                        if enabled {
+                            manifest.set_enabled()?;
                         }
                     }
                 }
@@ -269,7 +262,7 @@ pub fn find_and_extract_archive(
         } else {
             Ok(None)
         }
-    } else if let Some((sa, f)) = find_mod_by_name_fuzzy(&sf, name) {
+    } else if let Some((sa, f)) = find_archive_by_name_fuzzy(&sf, name) {
         if extract_downloaded_file(download_dir, cache_dir, sa, f.as_path())? {
             install_downloaded_file(cache_dir, &f).map(Some)
         } else {
@@ -359,7 +352,7 @@ pub fn find_archive_by_name(
         .iter()
         .find_map(|(archive_type, f)| (f == name).then(|| (*archive_type, f.clone())))
 }
-pub fn find_mod_by_name_fuzzy(
+pub fn find_archive_by_name_fuzzy(
     archive_list: &[(SupportedArchives, Utf8PathBuf)],
     fuzzy_name: &str,
 ) -> Option<(SupportedArchives, Utf8PathBuf)> {

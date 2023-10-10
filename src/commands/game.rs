@@ -140,7 +140,7 @@ impl RunCmd {
             .arg("run")
             .arg("io.github.loot.loot")
             .arg("--game")
-            .arg(settings.game().nexus_game_name()) //FIXME
+            .arg(settings.game().game_name()) //FIXME
             .arg("--game-path")
             .arg(settings.game_dir())
             .arg("--loot-data-path")
