@@ -5,7 +5,7 @@ mod sealed {
 
     pub trait InquireExt<T>: Sized {
         type Output;
-        fn prompt(self) -> Self::Output;
+        fn prompt(self) -> inquire::error::InquireResult<Self::Output>;
     }
     pub struct InquireBuilder2<T, T2, I: InquireExt<T>, B: InquireExt<T2>> {
         pub(super) inquire: I,
@@ -14,16 +14,25 @@ mod sealed {
         pub(super) _p2: PhantomData<T2>,
     }
 }
-use inquire::InquireError;
+use inquire::error::InquireResult;
 use sealed::{InquireBuilder2, InquireExt};
 
 pub struct InquireBuilder<T, I: InquireExt<T>> {
+    test: Option<T>,
     inquire: I,
     _p: PhantomData<T>,
 }
 impl<T, I: InquireExt<T>> InquireBuilder<T, I> {
     pub fn new(inquire: I) -> Self {
         Self {
+            test: None,
+            inquire,
+            _p: PhantomData,
+        }
+    }
+    pub fn new_with(test: Option<T>, inquire: I) -> Self {
+        Self {
+            test,
             inquire,
             _p: PhantomData,
         }
@@ -39,14 +48,14 @@ impl<T, I: InquireExt<T>> InquireBuilder<T, I> {
             _p2: PhantomData,
         }
     }
-    fn prompt(self) -> <I as InquireExt<T>>::Output {
-        self.inquire.prompt()
+    fn prompt(self) -> InquireResult<<I as InquireExt<T>>::Output> {
+        self.test.map(Ok).unwrap_or_else(self.inquire.prompt())
     }
 }
 impl<T, I: InquireExt<T>> InquireExt<T> for InquireBuilder<T, I> {
     type Output = <I as InquireExt<T>>::Output;
 
-    fn prompt(self) -> Self::Output {
+    fn prompt(self) -> InquireResult<Self::Output> {
         self.inquire.prompt()
     }
 }
@@ -63,10 +72,12 @@ impl<T, T2, I: InquireExt<T>, B: InquireExt<T2>> InquireBuilder2<T, T2, I, B> {
             _p2: PhantomData,
         }
     }
-    fn prompt(self) -> (<I as InquireExt<T>>::Output, <B as InquireExt<T2>>::Output) {
-        let t2 = self.next_inquire.prompt();
-        let t = self.inquire.prompt();
-        (t, t2)
+    fn prompt(
+        self,
+    ) -> InquireResult<(<I as InquireExt<T>>::Output, <B as InquireExt<T2>>::Output)> {
+        let t2 = self.next_inquire.prompt()?;
+        let t = self.inquire.prompt()?;
+        Ok((t, t2))
     }
 }
 impl<T, T2, I: InquireExt<T>, B: InquireExt<T2>> InquireExt<(T, T2)>
@@ -74,23 +85,23 @@ impl<T, T2, I: InquireExt<T>, B: InquireExt<T2>> InquireExt<(T, T2)>
 {
     type Output = (<I as InquireExt<T>>::Output, <B as InquireExt<T2>>::Output);
 
-    fn prompt(self) -> Self::Output {
+    fn prompt(self) -> InquireResult<Self::Output> {
         self.prompt()
     }
 }
 
 impl<'a, T: Display> InquireExt<T> for inquire::Select<'a, T> {
-    type Output = inquire::error::InquireResult<T>;
+    type Output = T;
 
-    fn prompt(self) -> Self::Output {
+    fn prompt(self) -> InquireResult<Self::Output> {
         inquire::Select::prompt(self)
     }
 }
 
 impl<'a, T: Display> InquireExt<T> for inquire::MultiSelect<'a, T> {
-    type Output = inquire::error::InquireResult<Vec<T>>;
+    type Output = Vec<T>;
 
-    fn prompt(self) -> Self::Output {
+    fn prompt(self) -> InquireResult<Self::Output> {
         inquire::MultiSelect::prompt(self)
     }
 }
