@@ -41,6 +41,7 @@ mod modlist;
 mod mods;
 mod settings;
 mod tag;
+mod ui;
 mod utils;
 
 use settings::{LogLevel, Settings};

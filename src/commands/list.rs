@@ -6,11 +6,10 @@ use clap::Parser;
 use comfy_table::{Cell, Color};
 
 use crate::{
-    conflict::{conflict_list_by_file, conflict_list_by_mod},
-    dmodman::DmodMan,
+    conflict::conflict_list_by_file,
     mods::GatherModList,
     settings::{create_table, Settings},
-    tag::Tag,
+    ui::ModListBuilder,
 };
 
 #[derive(Debug, Clone, Parser, Default)]
@@ -45,88 +44,20 @@ impl ListCmd {
 
 pub fn list_mods(settings: &Settings) -> Result<()> {
     let mod_list = Vec::gather_mods(settings.cache_dir())?;
-    let conflict_list = conflict_list_by_mod(&mod_list)?;
 
-    //TODO: create seperate tables for each label we encounter.
-
-    let mut table = create_table(vec![
-        "Index", "Name", "Priority", "Status", "Version", "Nexus Id", "Mod Type", "Tags", "Notes",
-    ]);
-
-    for (idx, md) in mod_list.iter().enumerate() {
-        let is_loser = conflict_list
-            .get(&md.name().to_string())
-            .is_some_and(|c| !c.losing_to().is_empty());
-        let is_winner = conflict_list
-            .get(&md.name().to_string())
-            .is_some_and(|c| !c.winning_over().is_empty());
-
-        let tag = Tag::from((is_loser, is_winner));
-
-        // Detect if we all files of this manifest are overwritten by other mods
-        let tag = if is_loser {
-            let mut file_not_lost = false;
-            let conflict_list = conflict_list_by_file(&mod_list)?;
-
-            for f in md.dest_files()? {
-                if let Some(contenders) = conflict_list.get(&f) {
-                    if let Some(c) = contenders.last() {
-                        if c == md.name() {
-                            file_not_lost = true;
-                        }
-                    }
-                } else {
-                    file_not_lost = true;
-                }
-            }
-
-            if file_not_lost {
-                tag
-            } else {
-                Tag::CompleteLoser
-            }
-        } else {
-            tag
-        };
-        let tag = if md.is_enabled() { tag } else { Tag::Disabled };
-
-        let color = Color::from(tag);
-        let idx_color = if color == Color::White {
-            Color::Reset
-        } else {
-            color
-        };
-
-        let notes = {
-            let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
-            if dmodman_list.iter().any(|dmod| md.is_an_update(dmod)) {
-                "Update Available"
-            } else {
-                ""
-            }
-        };
-
-        table.add_row(vec![
-            Cell::new(idx.to_string()).fg(idx_color),
-            Cell::new(md.name().to_string()).fg(color),
-            Cell::new(md.priority().to_string()).fg(color),
-            Cell::new(tag).fg(color),
-            Cell::new(md.version().unwrap_or("<Unknown>").to_string()).fg(color),
-            Cell::new(
-                md.nexus_id()
-                    .map_or("<Unknown>".to_owned(), |nid| nid.to_string()),
-            )
-            .fg(color),
-            Cell::new(md.kind().to_string()).fg(color),
-            Cell::new(format!("{}", md.tags().join(","))),
-            Cell::new(notes),
-        ]);
-    }
-
-    table.add_row_if(
-        |idx, _row| idx.eq(&0),
-        vec![Cell::new("No mods are installed.")],
-    );
+    let table = ModListBuilder::new(&mod_list)
+        .with_index()
+        .with_priority()
+        .with_status()
+        .with_version()
+        .with_nexus_id()
+        .with_mod_type()
+        .with_tags()
+        .with_notes(settings.download_dir())
+        .with_colour()
+        .with_headers()
+        .build()?
+        .join("\n");
 
     log::info!("");
     log::info!("{table}");

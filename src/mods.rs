@@ -23,6 +23,7 @@ use crate::{
         loader::create_loader_manifest,
     },
     manifest::{Manifest, MANIFEST_EXTENSION},
+    ui::ModListBuilder,
     utils::AddExtension,
 };
 
@@ -504,25 +505,41 @@ impl FindInModList for &[Manifest] {
         }
     }
     fn select(&self) -> Option<usize> {
-        let choices_vec = self
-            .iter()
-            .enumerate()
-            .map(|(idx, m)| (idx, m.name()))
-            .collect::<Vec<_>>();
-        let names_vec = choices_vec.iter().map(|(_idx, n)| *n).collect::<Vec<_>>();
+        // let choices_vec = self
+        //     .iter()
+        //     .enumerate()
+        //     .map(|(idx, m)| (idx, m.name()))
+        //     .collect::<Vec<_>>();
+        // let names_vec = choices_vec.iter().map(|(_idx, n)| *n).collect::<Vec<_>>();
+
+        let table = ModListBuilder::new(self)
+            .with_index()
+            .with_priority()
+            .with_status()
+            .with_version()
+            .with_nexus_id()
+            .with_mod_type()
+            .with_tags()
+            // .with_notes(settings.download_dir())
+            .with_colour()
+            // .with_headers()
+            .build()
+            .ok()?;
 
         use inquire::{error::InquireError, Select};
 
-        let ans: Result<&str, InquireError> =
-            Select::new("Multiple options found, please specify:", names_vec)
-                .with_page_size(20)
+        let ans: Result<String, InquireError> =
+            Select::new("Multiple options found, please specify:", table.clone())
+                .with_page_size(50)
                 .with_vim_mode(true)
                 .prompt();
 
         match ans {
-            Ok(choice) => choices_vec
+            Ok(choice) => table
                 .iter()
-                .find_map(|(idx, n)| (choice == *n).then_some(*idx)),
+                // .skip(1)
+                .enumerate()
+                .find_map(|(idx, n)| (choice == *n).then_some(idx)),
             Err(_) => None,
         }
     }

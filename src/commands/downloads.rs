@@ -14,14 +14,14 @@ use crate::{
     installers::stdin::{Input, InputWithDefault},
     manifest::Manifest,
     mods::{FindInModList, GatherModList, ModKind, ModList},
-    settings::{create_table, Settings},
+    settings::Settings,
+    ui::FileListBuilder,
     utils::{rename_recursive, AddExtension},
 };
 
 use anyhow::Result;
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::Parser;
-use comfy_table::{Cell, Color};
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use indicatif::{MultiProgress, ProgressBar, ProgressStyle};
 use read_stdin::prompt_until_ok;
@@ -163,46 +163,14 @@ impl DownloadCmd {
 }
 
 pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
-    let sf = downloaded_files(download_dir)?;
-    let mod_list = Vec::gather_mods(cache_dir)?;
-    let mod_list = mod_list
-        .iter()
-        .map(|m| (m.bare_file_name().to_string(), m))
-        .collect::<HashMap<_, _>>();
+    let list = FileListBuilder::new(download_dir, cache_dir)
+        .with_index()
+        .with_status()
+        .with_headers()
+        .with_colour()
+        .build()?;
 
-    let mut table = create_table(vec!["Index", "Archive", "Status"]);
-
-    for (idx, (_, f)) in sf.iter().enumerate() {
-        let dmodman = DmodMan::try_from(download_dir.join(&f).add_extension("json")).ok();
-        let archive = dmodman.as_ref().map_or_else(
-            || f.with_extension("").as_str().to_lowercase(),
-            DmodMan::name,
-        );
-        let manifest = mod_list.get(&archive);
-
-        log::trace!("testing {} against {}.", f.as_str(), archive);
-
-        let (state, color) = match (
-            // is installed
-            manifest.is_some(),
-            // is an upgrade
-            dmodman
-                .and_then(|dmod| manifest.map(|m| m.is_an_update(&dmod)))
-                .unwrap_or(false),
-        ) {
-            (true, false) => ("Installed", Color::Grey),
-            (true, true) => ("Upgrade", Color::Yellow),
-            (false, _) => ("New", Color::Green),
-        };
-
-        table.add_row(vec![
-            Cell::new(idx).fg(color),
-            Cell::new(f).fg(color),
-            Cell::new(state).fg(color),
-        ]);
-    }
-
-    log::info!("{table}");
+    log::info!("{}", list.join("\n"));
     Ok(())
 }
 
