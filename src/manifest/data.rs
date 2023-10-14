@@ -35,4 +35,18 @@ impl DataManifest {
             false
         }
     }
+    pub fn enable_file(&mut self, name: &str) -> bool {
+        if let Some((idx, _isf)) = self.disabled_files.iter().enumerate().find(|(_, isf)| {
+            if isf.source().to_string().eq(name) {
+                true
+            } else {
+                isf.source().file_name().unwrap_or_default().eq(name)
+            }
+        }) {
+            self.files.push(self.disabled_files.remove(idx));
+            true
+        } else {
+            false
+        }
+    }
 }

@@ -12,7 +12,7 @@ use inquire::CustomType;
 use crate::{
     conflict::conflict_list_by_file,
     errors::ModErrors,
-    manifest::{install_file::SelectFile as _, Manifest},
+    manifest::Manifest,
     mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::{create_table, Settings},
     ui::{FileListBuilder, FindSelectBuilder, InquireBuilder},
@@ -64,6 +64,14 @@ pub enum ModCmd {
         /// File to disable
         file: Option<String>,
     },
+    /// Enable 'file_name' from mod 'mod_name'
+    EnableFile {
+        /// Name of the mod which hosts <file>
+        name: Option<String>,
+        /// File to enable
+        file: Option<String>,
+    },
+    //TODO: Enable File
     /// Find either <config_name> or all files with <extension> in mod <name>. Then optionally copy those files to <custom_mod>. Finally run the configured editor, which was taken from '$EDITOR', or use 'xdg-open', on those files.
     EditConfig {
         /// name of the mod which hosts the config file
@@ -161,17 +169,46 @@ impl ModCmd {
                     .build()?
                     .prompt()?;
 
-                let file_name = if let Some(file) = file {
-                    file
-                } else {
-                    mod_list[idx]
-                        .files()?
-                        .select()
-                        .unwrap_or_default()
-                        .to_string()
-                };
+                let file_name = FindSelectBuilder::new(
+                    FileListBuilder::new(&mod_list, idx)
+                        .with_origin()
+                        .with_colour(),
+                )
+                .with_msg("Please select a file to disable:")
+                .with_input(file.as_deref())
+                .build()?
+                .prompt()?;
 
                 if mod_list[idx].disable_file(&file_name) {
+                    if mod_list[idx].is_enabled() {
+                        mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
+                    }
+                    Ok(())
+                } else {
+                    // log::trace!("File '{file_name}' not found within mod '{mod_name}'.");
+                    Err(ModErrors::FileNotFound(name.unwrap_or_default(), file_name).into())
+                }
+            }
+            Self::EnableFile { name, file } => {
+                let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
+                let idx = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select the source mod of the file to be enabled:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .prompt()?;
+
+                let file_name = FindSelectBuilder::new(
+                    FileListBuilder::new(&mod_list, idx)
+                        .disabled_files()
+                        .with_origin()
+                        .with_colour(),
+                )
+                .with_msg("Please select a file to enable:")
+                .with_input(file.as_deref())
+                .build()?
+                .prompt()?;
+
+                if mod_list[idx].enable_file(&file_name) {
                     if mod_list[idx].is_enabled() {
                         mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                     }
@@ -360,7 +397,7 @@ impl ModCmd {
                 file,
             } => {
                 let mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let ((source_idx, dest_idx), file_name) =
+                let (source_idx, dest_idx) =
                     FindSelectBuilder::new(mod_list.default_list_builder())
                         .with_msg("Please select the source mod, to copy the file from:")
                         .with_input(source.as_deref())
@@ -371,17 +408,17 @@ impl ModCmd {
                                 .with_input(destination.as_deref())
                                 .build()?,
                         )
-                        .with(
-                            FindSelectBuilder::new(
-                                FileListBuilder::new(settings.download_dir(), settings.cache_dir())
-                                    .with_status()
-                                    .with_colour(),
-                            )
-                            .with_msg("Please select a file to copy:")
-                            .with_input(file.as_deref())
-                            .build()?,
-                        )
                         .prompt()?;
+
+                let file_name = FindSelectBuilder::new(
+                    FileListBuilder::new(&mod_list, source_idx)
+                        .with_origin()
+                        .with_colour(),
+                )
+                .with_msg("Please select a file to copy:")
+                .with_input(file.as_deref())
+                .build()?
+                .prompt()?;
 
                 //TODO check that custom_mod is indeed a custom mod
 

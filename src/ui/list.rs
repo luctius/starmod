@@ -7,6 +7,7 @@ use comfy_table::{Cell, Color};
 use crate::{
     commands::downloads::downloaded_files,
     conflict::{conflict_list_by_file, conflict_list_by_mod},
+    decompress::SupportedArchives,
     dmodman::DmodMan,
     manifest::Manifest,
     mods::GatherModList,
@@ -237,6 +238,120 @@ impl<'a> ListBuilder for ModListBuilder<'a> {
 }
 
 pub struct FileListBuilder<'a> {
+    mod_list: &'a [Manifest],
+    mod_idx: usize,
+    disabled_files: bool,
+    with_index: bool,
+    with_origin: bool,
+    with_headers: bool,
+    with_colour: bool,
+}
+impl<'a> FileListBuilder<'a> {
+    pub fn new(mod_list: &'a [Manifest], mod_idx: usize) -> Self {
+        Self {
+            mod_list,
+            mod_idx,
+            disabled_files: false,
+            with_index: false,
+            with_origin: false,
+            with_headers: false,
+            with_colour: false,
+        }
+    }
+    pub fn disabled_files(mut self) -> Self {
+        self.disabled_files = true;
+        self
+    }
+    pub fn with_index(mut self) -> Self {
+        self.with_index = true;
+        self
+    }
+    pub fn with_origin(mut self) -> Self {
+        self.with_origin = true;
+        self
+    }
+    pub fn with_headers(mut self) -> Self {
+        self.with_headers = true;
+        self
+    }
+    pub fn with_colour(mut self) -> Self {
+        self.with_colour = true;
+        self
+    }
+    pub fn build(self) -> Result<Vec<String>> {
+        // let conflict_list = conflict_list_by_mod(self.mod_list)?;
+        let file_conflist_list = conflict_list_by_file(self.mod_list)?;
+
+        let headers = if self.with_headers {
+            let mut headers = Vec::new();
+            if self.with_index {
+                headers.push("Index");
+            }
+            if self.with_origin {
+                headers.push("Source");
+            }
+            headers.push("Destination");
+            headers
+        } else {
+            vec![]
+        };
+
+        let mut table = create_table(headers);
+
+        let manifest = &self.mod_list[self.mod_idx];
+
+        let files = if self.disabled_files {
+            manifest.files()?
+        } else {
+            manifest.disabled_files()
+        };
+
+        for (idx, isf) in files.iter().enumerate() {
+            let color = if self.with_colour {
+                if file_conflist_list.contains_key(&isf.destination().to_string()) {
+                    if file_conflist_list
+                        .get(&isf.destination().to_string())
+                        .unwrap()
+                        .last()
+                        .unwrap()
+                        == manifest.name()
+                    {
+                        Color::Green
+                    } else {
+                        Color::Red
+                    }
+                } else {
+                    Color::White
+                }
+            } else {
+                Color::Reset
+            };
+
+            let mut row = vec![];
+
+            if self.with_index {
+                row.push(Cell::new(idx).fg(color))
+            }
+            if self.with_origin {
+                row.push(Cell::new(isf.source().to_string()).fg(color));
+            }
+            row.push(Cell::new(isf.destination().to_string()).fg(color));
+
+            table.add_row(row);
+        }
+
+        let skip = if self.with_headers { 0 } else { 1 };
+
+        Ok(table.lines().skip(skip).collect::<Vec<_>>())
+    }
+}
+impl<'a> ListBuilder for FileListBuilder<'a> {
+    fn build(self) -> Result<Vec<String>> {
+        self.build()
+    }
+}
+
+pub struct ArchiveListBuilder<'a> {
     download_dir: &'a Utf8Path,
     cache_dir: &'a Utf8Path,
     with_index: bool,
@@ -244,7 +359,7 @@ pub struct FileListBuilder<'a> {
     with_headers: bool,
     with_colour: bool,
 }
-impl<'a> FileListBuilder<'a> {
+impl<'a> ArchiveListBuilder<'a> {
     pub fn new(download_dir: &'a Utf8Path, cache_dir: &'a Utf8Path) -> Self {
         Self {
             download_dir,
@@ -271,8 +386,11 @@ impl<'a> FileListBuilder<'a> {
         self.with_colour = true;
         self
     }
+    pub fn list(&self) -> Result<Vec<(SupportedArchives, Utf8PathBuf)>> {
+        downloaded_files(self.download_dir)
+    }
     pub fn build(self) -> Result<Vec<String>> {
-        let sf = downloaded_files(self.download_dir)?;
+        let sf = self.list()?;
         let mod_list = Vec::gather_mods(self.cache_dir)?;
         let mod_list = mod_list
             .iter()
@@ -355,7 +473,7 @@ impl<'a> FileListBuilder<'a> {
         Ok(table.lines().skip(skip).collect::<Vec<_>>())
     }
 }
-impl<'a> ListBuilder for FileListBuilder<'a> {
+impl<'a> ListBuilder for ArchiveListBuilder<'a> {
     fn build(self) -> Result<Vec<String>> {
         self.build()
     }

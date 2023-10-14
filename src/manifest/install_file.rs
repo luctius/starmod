@@ -74,13 +74,3 @@ impl PartialOrd for InstallFile {
         Some(self.cmp(other))
     }
 }
-
-pub trait SelectFile {
-    fn select(&self) -> Option<&str>;
-}
-
-impl SelectFile for Vec<InstallFile> {
-    fn select(&self) -> Option<&str> {
-        todo!()
-    }
-}

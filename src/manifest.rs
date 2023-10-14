@@ -95,6 +95,15 @@ impl ManifestInternal {
             Self::Custom(_c) => false,
         }
     }
+    pub fn enable_file(&mut self, name: &str) -> bool {
+        match self {
+            Self::Data(d) => d.enable_file(name),
+
+            //TODO: does it make sense disabling files in these?
+            Self::Loader(_l) => false,
+            Self::Custom(_c) => false,
+        }
+    }
 }
 
 //TODO more info about the mod, description, authors, version, etc
@@ -272,6 +281,9 @@ impl Manifest {
     }
     pub fn disable_file(&mut self, name: &str) -> bool {
         self.internal.disable_file(name)
+    }
+    pub fn enable_file(&mut self, name: &str) -> bool {
+        self.internal.enable_file(name)
     }
     pub const fn priority(&self) -> isize {
         self.priority

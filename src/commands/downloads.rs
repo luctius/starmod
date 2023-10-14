@@ -15,7 +15,7 @@ use crate::{
     manifest::Manifest,
     mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::Settings,
-    ui::{FileListBuilder, FindSelectBuilder},
+    ui::{ArchiveListBuilder, FindSelectBuilder},
     utils::{rename_recursive, AddExtension},
 };
 
@@ -35,7 +35,7 @@ pub enum DownloadCmd {
     #[clap(visible_aliases = &["lists", "l"])]
     List,
     /// Extract given archive
-    Extract { name: String },
+    Extract { name: Option<String> },
     /// Extract all archives which are not in the cache directory.
     ExtractAll,
     /// Re-install given archive
@@ -52,11 +52,23 @@ impl DownloadCmd {
         match self {
             Self::List => list_downloaded_files(settings.download_dir(), settings.cache_dir()),
             Self::Extract { name } => {
+                let name = FindSelectBuilder::new(
+                    ArchiveListBuilder::new(settings.download_dir(), settings.cache_dir())
+                        .with_status()
+                        .with_colour(),
+                )
+                .with_msg("Please select an archive to extract:")
+                .with_input(name.as_deref())
+                .build()?
+                .prompt()?;
+
+                // TODO: simplify this
                 find_and_extract_archive(
                     settings.download_dir(),
                     settings.cache_dir(),
                     name.as_str(),
                 )?;
+
                 list_mods(settings)
             }
             Self::ExtractAll => {
@@ -164,7 +176,7 @@ impl DownloadCmd {
 }
 
 pub fn list_downloaded_files(download_dir: &Utf8Path, cache_dir: &Utf8Path) -> Result<()> {
-    let list = FileListBuilder::new(download_dir, cache_dir)
+    let list = ArchiveListBuilder::new(download_dir, cache_dir)
         .with_index()
         .with_status()
         .with_headers()

@@ -1,14 +1,14 @@
 mod list;
 
 use inquire::Select;
-pub use list::{FileListBuilder, ListBuilder, ModListBuilder};
+pub use list::{ArchiveListBuilder, FileListBuilder, ListBuilder, ModListBuilder};
 
 mod inquiry;
 pub use inquiry::{InquireBuilder, SelectToIdx};
 
 use anyhow::Result;
 
-use crate::mods::FindInModList;
+use crate::{mods::FindInModList, settings::default_page_size};
 
 pub struct FindSelectBuilder<'a, B: ListBuilder> {
     msg: Option<&'a str>,
@@ -59,17 +59,39 @@ impl<'a> FindSelectBuilder<'a, FileListBuilder<'a>> {
         //     .map(|input| self.list_builder.list().find_mod(input))
         //     .flatten();
 
-        // let list = self.list_builder.build()?;
+        let list = self.list_builder.build()?;
 
-        // let select = SelectToIdx::new(self.msg.unwrap_or_default(), list);
-        // let select = if let Some(input) = self.input {
-        //     select.with_starting_filter_input(input)
-        // } else {
-        //     select
-        // };
-
-        todo!()
+        let select =
+            Select::new(self.msg.unwrap_or_default(), list).with_page_size(default_page_size());
+        let select = if let Some(input) = self.input {
+            select.with_starting_filter_input(input)
+        } else {
+            select
+        };
 
         // Ok(InquireBuilder::new_with_test(idx, select))
+        Ok(InquireBuilder::new(select))
+    }
+}
+impl<'a> FindSelectBuilder<'a, ArchiveListBuilder<'a>> {
+    pub fn build(self) -> Result<InquireBuilder<Select<'a, String>>> {
+        //TODO: allow for input in archive_list_builder select
+        // let idx = self
+        //     .input
+        //     .map(|input| self.list_builder.list()?.find_mod(input))
+        //     .flatten();
+
+        let list = self.list_builder.build()?;
+
+        let select =
+            Select::new(self.msg.unwrap_or_default(), list).with_page_size(default_page_size());
+        let select = if let Some(input) = self.input {
+            select.with_starting_filter_input(input)
+        } else {
+            select
+        };
+
+        // Ok(InquireBuilder::new_with_test(idx, select))
+        Ok(InquireBuilder::new(select))
     }
 }

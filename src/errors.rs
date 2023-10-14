@@ -55,3 +55,9 @@ pub enum DownloadError {
     #[error("the archive {0} cannot be found.")]
     ArchiveNotFound(String),
 }
+
+#[derive(Error, Debug)]
+pub enum InternalError {
+    #[error("We encountered an internal error, please report this: {0}.")]
+    Error(String),
+}

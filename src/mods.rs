@@ -2,12 +2,11 @@ use std::{
     collections::HashSet,
     fmt::Display,
     fs::{self, read_link, remove_dir, remove_file, rename, DirBuilder},
-    io::{stdin, IsTerminal},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Error, Result};
 use camino::{Utf8Path, Utf8PathBuf};
 use indicatif::{ProgressBar, ProgressStyle};
 use serde::{Deserialize, Serialize};
@@ -15,6 +14,7 @@ use walkdir::WalkDir;
 
 use crate::{
     conflict::conflict_list_by_file,
+    errors::InternalError,
     installers::{
         custom::create_custom_manifest,
         data::create_data_manifest,
@@ -22,7 +22,7 @@ use crate::{
         loader::create_loader_manifest,
     },
     manifest::{Manifest, MANIFEST_EXTENSION},
-    ui::{InquireBuilder, ModListBuilder, SelectToIdx},
+    ui::ModListBuilder,
     utils::AddExtension,
 };
 
@@ -205,7 +205,12 @@ impl ModList for &mut [Manifest] {
             let destination = game_dir.join(Utf8PathBuf::from(f.destination()));
             log::trace!("starting with file: {} -> {}", origin, destination);
 
-            let destination_base = destination.parent().unwrap().to_path_buf();
+            let destination_base = destination
+                .parent()
+                .ok_or(InternalError::Error(
+                    "ModList::enable destination has no parent".to_string(),
+                ))?
+                .to_path_buf();
             if !dir_cache.lock().unwrap().contains(&destination_base) {
                 log::trace!("creating directory {destination_base}");
 
@@ -384,7 +389,12 @@ impl ModList for &mut [Manifest] {
                 self.disable_mod(cache_dir, game_dir, idx)?;
             }
         } else {
-            todo!()
+            Err::<(), Error>(
+                InternalError::Error(format!(
+                    "ModList::enable_mod(0): No mod found with index: {idx}"
+                ))
+                .into(),
+            )?;
         }
         if let Some(md) = self.get_mut(idx) {
             log::debug!("Enabling {}", md.name());
@@ -392,7 +402,10 @@ impl ModList for &mut [Manifest] {
             self[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
             Ok(())
         } else {
-            todo!()
+            Err(InternalError::Error(format!(
+                "ModList::enable_mod(1): No mod found with index: {idx}"
+            ))
+            .into())
         }
     }
     fn disable_mod(&mut self, cache_dir: &Utf8Path, game_dir: &Utf8Path, idx: usize) -> Result<()> {
@@ -403,7 +416,10 @@ impl ModList for &mut [Manifest] {
             self[0..=idx].as_mut().re_enable(cache_dir, game_dir)?;
             Ok(())
         } else {
-            todo!()
+            Err(InternalError::Error(format!(
+                "ModList::disable_mod: No mod found with index: {idx}"
+            ))
+            .into())
         }
     }
 }
