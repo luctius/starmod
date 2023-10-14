@@ -409,20 +409,20 @@ impl ModList for &mut [Manifest] {
 }
 
 pub trait FindInModList {
-    fn find_mod(&self, mod_name: Option<&str>) -> Result<usize>;
+    fn find_mod(&self, mod_name: &str) -> Option<usize>;
     fn find_mod_by_name(&self, name: &str) -> Option<usize>;
-    fn select<'a>(&'a self) -> Result<SelectToIdx<'a, String>>;
+    fn default_list_builder(&self) -> ModListBuilder<'_>;
 }
 
 impl FindInModList for Vec<Manifest> {
-    fn find_mod(&self, mod_name: Option<&str>) -> Result<usize> {
+    fn find_mod(&self, mod_name: &str) -> Option<usize> {
         self.as_slice().find_mod(mod_name)
     }
     fn find_mod_by_name(&self, mod_name: &str) -> Option<usize> {
         self.as_slice().find_mod_by_name(mod_name)
     }
-    fn select<'a>(&'a self) -> Result<SelectToIdx<'a, String>> {
-        let list = ModListBuilder::new(self)
+    fn default_list_builder(&self) -> ModListBuilder<'_> {
+        ModListBuilder::new(self)
             .with_index()
             .with_priority()
             .with_status()
@@ -430,38 +430,17 @@ impl FindInModList for Vec<Manifest> {
             .with_nexus_id()
             .with_mod_type()
             .with_tags()
-            // .with_notes(settings.download_dir())
             .with_colour()
-            // .with_headers()
-            .build()?;
-
-        Ok(
-            SelectToIdx::new("Multiple options found, please specify:", list)
-                .with_vim_mode(true)
-                .with_help_message("Please select a mod."),
-        )
     }
 }
 impl FindInModList for &[Manifest] {
-    fn find_mod(&self, mod_name: Option<&str>) -> Result<usize> {
+    fn find_mod(&self, mod_name: &str) -> Option<usize> {
         // check if this is an index,
         // if not, search by full name,
 
-        let idx = if let Some(mod_name) = mod_name {
-            mod_name
-                .parse::<usize>()
-                .map_or_else(|_| self.find_mod_by_name(mod_name), Some)
-        } else {
-            None
-        };
-
-        InquireBuilder::new_with_test(
-            idx,
-            self.select()?
-                .with_starting_filter_input(mod_name.unwrap_or_default()),
-        )
-        .prompt()
-        .map_err(|e| e.into())
+        mod_name
+            .parse::<usize>()
+            .map_or_else(|_| self.find_mod_by_name(mod_name), Some)
     }
 
     fn find_mod_by_name(&self, name: &str) -> Option<usize> {
@@ -469,8 +448,8 @@ impl FindInModList for &[Manifest] {
             .enumerate()
             .find_map(|(idx, m)| (m.name() == name).then_some(idx))
     }
-    fn select<'a>(&'a self) -> Result<SelectToIdx<'a, String>> {
-        let list = ModListBuilder::new(self)
+    fn default_list_builder(&self) -> ModListBuilder<'_> {
+        ModListBuilder::new(self)
             .with_index()
             .with_priority()
             .with_status()
@@ -478,15 +457,6 @@ impl FindInModList for &[Manifest] {
             .with_nexus_id()
             .with_mod_type()
             .with_tags()
-            // .with_notes(settings.download_dir())
             .with_colour()
-            // .with_headers()
-            .build()?;
-
-        Ok(
-            SelectToIdx::new("Multiple options found, please specify:", list)
-                .with_vim_mode(true)
-                .with_help_message("Please select a mod."),
-        )
     }
 }

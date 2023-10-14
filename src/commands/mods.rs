@@ -15,6 +15,7 @@ use crate::{
     manifest::{install_file::SelectFile as _, Manifest},
     mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::{create_table, Settings},
+    ui::{FileListBuilder, FindSelectBuilder, InquireBuilder},
 };
 
 use super::list::list_mods;
@@ -44,7 +45,7 @@ pub enum ModCmd {
     /// Create a custom mod 'name', optionally, instead of creating a directory, link to 'origin'
     CreateCustom {
         /// Name of the new custom mod.
-        name: String,
+        name: Option<String>,
         /// Path to the underlying directory which will be symlinked into the cache directory.
         origin: Option<Utf8PathBuf>,
     },
@@ -97,17 +98,17 @@ pub enum ModCmd {
     },
     /// Add tag <tag> to mod <name>
     TagAdd {
-        /// Name of the tag
-        tag: String,
         /// Name of the mod to add <tag> to.
         name: Option<String>,
+        /// Name of the tag
+        tag: Option<String>,
     },
     /// Remove tag <tag> from mod <name>
     TagRemove {
-        /// Name of the tag.
-        tag: String,
         /// Name of the mod to add <tag> to.
         name: Option<String>,
+        /// Name of the tag.
+        tag: Option<String>,
     },
     /// Remove mod 'name' from installation.
     /// Does not remove the mod from the downloads directory.
@@ -118,8 +119,8 @@ pub enum ModCmd {
     /// Rename mod 'old_mod_name' to 'new_mod_name'
     #[clap(visible_aliases = &["ren", "r"])]
     Rename {
-        new_mod_name: String,
         old_mod_name: Option<String>,
+        new_mod_name: Option<String>,
     },
     /// Set mod to new priority;
     /// Setting a priority below zero disables the mod.
@@ -137,7 +138,13 @@ impl ModCmd {
         match self {
             Self::Disable { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = mod_list.find_mod(name.as_deref())?;
+
+                let idx = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select a mod to disable:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .prompt()?;
+
                 mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                 list_mods(settings)
             }
@@ -146,12 +153,14 @@ impl ModCmd {
                 mod_list.disable(settings.cache_dir(), settings.game_dir())?;
                 list_mods(settings)
             }
-            Self::DisableFile {
-                name: mod_name,
-                file,
-            } => {
+            Self::DisableFile { name, file } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = mod_list.find_mod(mod_name.as_deref())?;
+                let idx = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select the source mod of the file to be disabled:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .prompt()?;
+
                 let file_name = if let Some(file) = file {
                     file
                 } else {
@@ -169,12 +178,16 @@ impl ModCmd {
                     Ok(())
                 } else {
                     // log::trace!("File '{file_name}' not found within mod '{mod_name}'.");
-                    Err(ModErrors::FileNotFound(mod_name.unwrap_or_default(), file_name).into())
+                    Err(ModErrors::FileNotFound(name.unwrap_or_default(), file_name).into())
                 }
             }
             Self::Enable { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = mod_list.find_mod(name.as_deref())?;
+                let idx = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select a mod to enable:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .prompt()?;
                 mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                 list_mods(settings)
             }
@@ -198,6 +211,17 @@ impl ModCmd {
             Self::List => list_mods(settings),
             Self::Show { name } => show_mod(settings.cache_dir(), name.as_deref()),
             Self::CreateCustom { origin, name } => {
+                let name = InquireBuilder::new_with_test(
+                    name,
+                    CustomType::new("Please specify the new priority")
+                        // .with_formatter(&|i| format!("${}", i))
+                        .with_error_message("Please type a valid number")
+                        .with_help_message("Type in a positive or negative number."),
+                )
+                .prompt()?;
+
+                //TODO Use file_path_select to select destination if not given
+
                 let destination = settings.cache_dir().join(&name);
                 if let Some(origin) = origin {
                     std::os::unix::fs::symlink(&origin, &destination)?;
@@ -221,7 +245,12 @@ impl ModCmd {
             }
             Self::Remove { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = mod_list.find_mod(name.as_deref())?;
+                let idx = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select a mod to REMOVE:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .prompt()?;
+
                 mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                 mod_list[idx].remove()?;
                 log::info!("Removed mod '{}'", mod_list[idx].name());
@@ -232,24 +261,37 @@ impl ModCmd {
                 new_mod_name,
             } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = mod_list.find_mod(old_mod_name.as_deref())?;
+                let (idx, new_mod_name) = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select a mod to rename:")
+                    .with_input(old_mod_name.as_deref())
+                    .build()?
+                    .with_test(
+                        new_mod_name,
+                        CustomType::new("Please specify the new name")
+                            // .with_formatter(&|i| format!("${}", i))
+                            .with_error_message("Please type a valid number")
+                            .with_help_message("Type in a positive or negative number."),
+                    )
+                    .prompt()?;
+
                 mod_list[idx].set_name(new_mod_name)?;
                 list_mods(settings)
             }
             Self::SetPriority { name, priority } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = mod_list.find_mod(name.as_deref())?;
+                let (idx, priority) = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select a mod to rename:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .with_test(
+                        priority,
+                        CustomType::new("Please specify the new priority")
+                            // .with_formatter(&|i| format!("${}", i))
+                            .with_error_message("Please type a valid number")
+                            .with_help_message("Type in a positive or negative number."),
+                    )
+                    .prompt()?;
                 let old_prio = mod_list[idx].priority();
-
-                let priority = if let Some(priority) = priority {
-                    priority
-                } else {
-                    CustomType::new("Please specify the new priority")
-                        // .with_formatter(&|i| format!("${}", i))
-                        .with_error_message("Please type a valid number")
-                        .with_help_message("Type in a positive or negative number.")
-                        .prompt()?
-                };
 
                 mod_list[idx].set_priority(priority)?;
                 if mod_list[idx].is_disabled() {
@@ -268,7 +310,19 @@ impl ModCmd {
             }
             Self::TagAdd { name, tag } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = mod_list.find_mod(name.as_deref())?;
+                let (idx, tag) = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select a mod to tag:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .with_test(
+                        tag,
+                        CustomType::new("Please specify the tag")
+                            // .with_formatter(&|i| format!("${}", i)) //TODO validate tag
+                            .with_error_message("Please type a one-word-tag")
+                            .with_help_message("Type in a one-word-tag."),
+                    )
+                    .prompt()?;
+
                 if mod_list[idx].add_tag(&tag)? {
                     // log::info!("Added tag {tag} to mod {name}.");
                     Ok(())
@@ -279,7 +333,19 @@ impl ModCmd {
             }
             Self::TagRemove { name, tag } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = mod_list.find_mod(name.as_deref())?;
+                let (idx, tag) = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select a mod from which to remove the tag:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .with_test(
+                        tag,
+                        CustomType::new("Please specify the tag")
+                            // .with_formatter(&|i| format!("${}", i)) //TODO validate tag
+                            .with_error_message("Please type a one-word-tag")
+                            .with_help_message("Type in a one-word-tag."),
+                    )
+                    .prompt()?;
+
                 if mod_list[idx].remove_tag(&tag)? {
                     // log::info!("Removed tag {tag} from mod {name}.");
                     Ok(())
@@ -289,25 +355,37 @@ impl ModCmd {
                 }
             }
             Self::CopyToCustom {
-                source: origin_mod,
-                destination: custom_mod,
+                source,
+                destination,
                 file,
             } => {
                 let mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let origin_idx = mod_list.find_mod(origin_mod.as_deref())?;
-                let custom_idx = mod_list.find_mod(custom_mod.as_deref())?;
-                //TODO check that custom_mod is indeed a custom mod
-                let file_name = if let Some(file) = file {
-                    file
-                } else {
-                    mod_list[origin_idx]
-                        .files()?
-                        .select()
-                        .unwrap_or_default()
-                        .to_string()
-                };
+                let ((source_idx, dest_idx), file_name) =
+                    FindSelectBuilder::new(mod_list.default_list_builder())
+                        .with_msg("Please select the source mod, to copy the file from:")
+                        .with_input(source.as_deref())
+                        .build()?
+                        .with(
+                            FindSelectBuilder::new(mod_list.default_list_builder())
+                                .with_msg("Please select the destination mod, to copy the file to:")
+                                .with_input(destination.as_deref())
+                                .build()?,
+                        )
+                        .with(
+                            FindSelectBuilder::new(
+                                FileListBuilder::new(settings.download_dir(), settings.cache_dir())
+                                    .with_status()
+                                    .with_colour(),
+                            )
+                            .with_msg("Please select a file to copy:")
+                            .with_input(file.as_deref())
+                            .build()?,
+                        )
+                        .prompt()?;
 
-                if let Some(file) = mod_list[origin_idx]
+                //TODO check that custom_mod is indeed a custom mod
+
+                if let Some(file) = mod_list[source_idx]
                     .origin_files()?
                     .iter()
                     .find(|f| f.file_name().unwrap().eq(&file_name))
@@ -315,9 +393,9 @@ impl ModCmd {
                     let origin = settings.cache_dir().join(file);
                     let destination = settings
                         .cache_dir()
-                        .join(mod_list[custom_idx].manifest_dir())
+                        .join(mod_list[dest_idx].manifest_dir())
                         .join(
-                            file.strip_prefix(mod_list[origin_idx].manifest_dir())
+                            file.strip_prefix(mod_list[source_idx].manifest_dir())
                                 .unwrap(),
                         );
 
@@ -333,7 +411,7 @@ impl ModCmd {
                     //     mod_list[origin_idx].name()
                     // );
                     Err(
-                        ModErrors::FileNotFound(mod_list[origin_idx].name().to_string(), file_name)
+                        ModErrors::FileNotFound(mod_list[source_idx].name().to_string(), file_name)
                             .into(),
                     )
                 }
@@ -342,27 +420,14 @@ impl ModCmd {
     }
 }
 
-fn show_mod(cache_dir: &Utf8Path, mod_name: Option<&str>) -> Result<()> {
+fn show_mod(cache_dir: &Utf8Path, name: Option<&str>) -> Result<()> {
     let mod_list = Vec::gather_mods(cache_dir)?;
+    let idx = FindSelectBuilder::new(mod_list.default_list_builder())
+        .with_msg("Please select a mod to show:")
+        .with_input(name.as_deref())
+        .build()?
+        .prompt()?;
 
-    // let list = ModListBuilder::new(&mod_list)
-    //     .with_priority()
-    //     .with_status()
-    //     .with_version()
-    //     .with_nexus_id()
-    //     .with_mod_type()
-    //     .with_tags()
-    //     // .with_notes(settings.download_dir())
-    //     .with_colour()
-    //     .build()?;
-
-    // let select = SelectToIdx::new("bla", list)
-    //     .with_starting_filter_input(mod_name.unwrap_or_default())
-    //     .with_vim_mode(true);
-
-    // let idx = InquireBuilder::new_with_test(mod_list.find_mod(mod_name), select).prompt()?;
-
-    let idx = mod_list.find_mod(mod_name)?;
     show_mod_status(&mod_list, idx)
 }
 
@@ -459,7 +524,11 @@ fn edit_mod_config_files(
     extension: &Option<String>,
 ) -> Result<()> {
     let mod_list = Vec::gather_mods(settings.cache_dir())?;
-    let mod_idx = mod_list.find_mod(name)?;
+    let mod_idx = FindSelectBuilder::new(mod_list.default_list_builder())
+        .with_msg("Please select the source mod of the config file:")
+        .with_input(name.as_deref())
+        .build()?
+        .prompt()?;
 
     let name = mod_list[mod_idx].name();
 

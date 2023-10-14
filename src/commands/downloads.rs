@@ -10,12 +10,12 @@ use std::{
 use crate::{
     decompress::SupportedArchives,
     dmodman::{DmodMan, DMODMAN_EXTENSION},
-    errors::{DownloadError, ModErrors},
+    errors::DownloadError,
     installers::stdin::{Input, InputWithDefault},
     manifest::Manifest,
     mods::{FindInModList, GatherModList, ModKind, ModList},
     settings::Settings,
-    ui::FileListBuilder,
+    ui::{FileListBuilder, FindSelectBuilder},
     utils::{rename_recursive, AddExtension},
 };
 
@@ -45,7 +45,7 @@ pub enum DownloadCmd {
     UpgradeAll,
     /// Update mod which have an archive in the archive directory with a newer version.
     #[clap(visible_alias = "update")]
-    Upgrade { name: String },
+    Upgrade { name: Option<String> },
 }
 impl DownloadCmd {
     pub fn execute(self, settings: &Settings) -> Result<()> {
@@ -65,7 +65,12 @@ impl DownloadCmd {
             }
             Self::ReInstall { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = mod_list.find_mod(name.as_deref())?;
+                let idx = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select a mod to re-install:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .prompt()?;
+
                 mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                 mod_list[idx].remove()?;
 
@@ -121,9 +126,12 @@ impl DownloadCmd {
             Self::Upgrade { name } => {
                 let dmodman_list = DmodMan::gather_list(settings.download_dir())?;
                 let mod_list = Vec::gather_mods(settings.cache_dir())?;
-
-                let mod_idx = mod_list.find_mod(Some(&name))?;
-                let md = &mod_list[mod_idx];
+                let idx = FindSelectBuilder::new(mod_list.default_list_builder())
+                    .with_msg("Please select a mod to upgrade:")
+                    .with_input(name.as_deref())
+                    .build()?
+                    .prompt()?;
+                let md = &mod_list[idx];
 
                 let dmodman = dmodman_list.iter().find(|dm| {
                     dm.name() == md.name() && dm.mod_id() == md.nexus_id().unwrap_or_default()

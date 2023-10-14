@@ -856,6 +856,7 @@ dependencies = [
 [[package]]
 name = "inquire"
 version = "0.6.2"
+source = "git+https://github.com/luctius/inquire.git?branch=select_starting_filter_input#a25607ef62d2c66d43b13ce59d1d59cfa28f105a"
 dependencies = [
  "bitflags 2.4.0",
  "crossterm 0.25.0",

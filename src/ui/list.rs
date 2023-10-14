@@ -15,6 +15,10 @@ use crate::{
     utils::AddExtension,
 };
 
+pub trait ListBuilder {
+    fn build(self) -> Result<Vec<String>>;
+}
+
 pub struct ModListBuilder<'a> {
     list: &'a [Manifest],
     download_dir: Option<Utf8PathBuf>,
@@ -86,6 +90,9 @@ impl<'a> ModListBuilder<'a> {
     pub fn with_headers(mut self) -> Self {
         self.with_headers = true;
         self
+    }
+    pub fn list(&self) -> &[Manifest] {
+        self.list
     }
     pub fn build(self) -> Result<Vec<String>> {
         let conflict_list = conflict_list_by_mod(self.list)?;
@@ -223,17 +230,22 @@ impl<'a> ModListBuilder<'a> {
         Ok(table.lines().skip(skip).collect::<Vec<_>>())
     }
 }
+impl<'a> ListBuilder for ModListBuilder<'a> {
+    fn build(self) -> Result<Vec<String>> {
+        self.build()
+    }
+}
 
-pub struct FileListBuilder<'a, 'b> {
+pub struct FileListBuilder<'a> {
     download_dir: &'a Utf8Path,
-    cache_dir: &'b Utf8Path,
+    cache_dir: &'a Utf8Path,
     with_index: bool,
     with_status: bool,
     with_headers: bool,
     with_colour: bool,
 }
-impl<'a, 'b> FileListBuilder<'a, 'b> {
-    pub fn new(download_dir: &'a Utf8Path, cache_dir: &'b Utf8Path) -> Self {
+impl<'a> FileListBuilder<'a> {
+    pub fn new(download_dir: &'a Utf8Path, cache_dir: &'a Utf8Path) -> Self {
         Self {
             download_dir,
             cache_dir,
@@ -341,5 +353,10 @@ impl<'a, 'b> FileListBuilder<'a, 'b> {
         let skip = if self.with_headers { 0 } else { 1 };
 
         Ok(table.lines().skip(skip).collect::<Vec<_>>())
+    }
+}
+impl<'a> ListBuilder for FileListBuilder<'a> {
+    fn build(self) -> Result<Vec<String>> {
+        self.build()
     }
 }

@@ -134,15 +134,15 @@ impl RunCmd {
         }
     }
     fn run_flatpack_loot(settings: &Settings) -> Result<()> {
-        log::debug!("Running 'flatpack run io.github.loot.loot --game starfield --game-path {} --loot-data-path {}'", settings.game_dir(), settings.loot_data_dir());
+        log::info!("Running 'flatpak run io.github.loot.loot --game starfield --game-path {} --loot-data-path {}'", settings.game_dir(), settings.loot_data_dir());
 
         let output = std::process::Command::new("flatpak")
             .arg("run")
             .arg("io.github.loot.loot")
             .arg("--game")
-            .arg(settings.game().game_name()) //FIXME
-            .arg("--game-path")
-            .arg(settings.game_dir())
+            .arg(settings.game().game_name())
+            // .arg("--game-path")
+            // .arg(settings.game_dir()) //FIXME
             .arg("--loot-data-path")
             .arg(settings.loot_data_dir())
             .output()?;
