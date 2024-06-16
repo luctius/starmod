@@ -367,6 +367,15 @@ impl Display for Settings {
                 ),
             ])
             .add_row(vec![
+                "Xedit Dir".to_owned(),
+                format!(
+                    "{}",
+                    self.xedit_dir
+                        .as_ref()
+                        .map_or_else(|| "<Unknown>".to_owned(), ToString::to_string)
+                ),
+            ])
+            .add_row(vec![
                 "User Dir".to_owned(),
                 format!(
                     "{}",
