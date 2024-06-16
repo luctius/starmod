@@ -50,13 +50,13 @@ term_size = "0.3.2"
 # valve_kv_tools = "0.3.0"
 # vdf-serde = "0.3.0"
 
-libloadorder = {git = "https://github.com/Ortham/libloadorder.git", branch = "starfield", optional=true}
+# libloadorder = {git = "https://github.com/Ortham/libloadorder.git", branch = "starfield", optional=true}
 
 [build-dependencies]
 shadow-rs = "0.21.0"
 
 [features]
-loadorder = ["libloadorder"]
+# loadorder = ["libloadorder"]
 
 [profile.release]
 codegen-units = 1

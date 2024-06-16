@@ -69,6 +69,7 @@ impl ModKind {
             }
 
             if info && config {
+                log::trace!("Mod Type: FoMod");
                 return Ok(Self::FoMod);
             }
         }
@@ -86,11 +87,13 @@ impl ModKind {
 
             if let Some(ext) = entry_path.extension() {
                 if ext == "exe" {
+                    log::trace!("Mod Type: Loader");
                     return Ok(Self::Loader);
                 }
             }
         }
 
+        log::trace!("Mod Type: Data Mod");
         Ok(Self::Data)
     }
     pub fn create_mod(self, cache_dir: &Utf8Path, name: &Utf8Path) -> Result<Manifest> {

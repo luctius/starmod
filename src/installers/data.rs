@@ -26,11 +26,13 @@ pub fn create_data_manifest(
         .same_file_system(true)
         .contents_first(true);
 
+    // Check for a 'Data' dir in the root directories
     for entry in walker {
         let entry = entry?;
         let entry_path = entry.path();
         if entry_path.is_dir() && entry.path().file_name().unwrap() == "data" {
             if data_path.is_none() {
+                log::debug!("Setting Data dir to root 'Data'.");
                 let entry_path = entry_path.to_path_buf();
                 data_path = Some(entry_path.strip_prefix(&manifest_dir)?.to_path_buf());
             } else {
@@ -40,8 +42,10 @@ pub fn create_data_manifest(
     }
 
     if data_path.is_none() {
+        // Check for the 'Data' dir in any directories
+
         let walker = WalkDir::new(&manifest_dir)
-            .min_depth(3)
+            .min_depth(1)
             .max_depth(5)
             .follow_links(false)
             .same_file_system(true)
@@ -52,6 +56,7 @@ pub fn create_data_manifest(
             let entry_path = entry.path();
             if entry_path.is_dir() && entry.path().file_name().unwrap() == "data" {
                 if data_path.is_none() {
+                    log::debug!("Setting Data dir to {}.", entry_path.display());
                     data_path = Some(
                         entry_path
                             .to_path_buf()
@@ -63,6 +68,80 @@ pub fn create_data_manifest(
                 }
             }
         }
+    }
+
+    if data_path.is_none() {
+        // Check for any 'esm' or 'esp' files...
+
+        let walker = WalkDir::new(&manifest_dir)
+            .min_depth(1)
+            .max_depth(5)
+            .follow_links(false)
+            .same_file_system(true)
+            .contents_first(true);
+
+        for entry in walker {
+            let entry = entry?;
+            let entry_path = entry.path();
+
+            // Avoid '*.esp' files for they should not be used with Starfield.
+            // TODO: FIXME: NOTE: disable this somehow for other games....
+            if entry_path.is_file() && entry_path.extension().unwrap() == "esp" {
+                Err(InstallerError::MultipleDataDirectories(name.to_string()))?;
+            }
+
+            if entry_path.is_file() && entry_path.extension().unwrap() == "esm" {
+                if data_path.is_none() {
+                    log::debug!("Setting Esm dir to {}.", entry_path.display());
+                    data_path = Some(
+                        entry_path
+                            .parent()
+                            .unwrap()
+                            .to_path_buf()
+                            .strip_prefix(&manifest_dir)?
+                            .to_path_buf(),
+                    );
+                } else {
+                    Err(InstallerError::MultipleDataDirectories(name.to_string()))?;
+                }
+            }
+        }
+    }
+
+    if data_path.is_none() {
+        // Check for any 'esl' files...
+
+        let walker = WalkDir::new(&manifest_dir)
+            .min_depth(1)
+            .max_depth(5)
+            .follow_links(false)
+            .same_file_system(true)
+            .contents_first(true);
+
+        for entry in walker {
+            let entry = entry?;
+            let entry_path = entry.path();
+
+            if entry_path.is_file() && entry_path.extension().unwrap() == "esl" {
+                if data_path.is_none() {
+                    log::debug!("Setting Esl dir to {}.", entry_path.display());
+                    data_path = Some(
+                        entry_path
+                            .parent()
+                            .unwrap()
+                            .to_path_buf()
+                            .strip_prefix(&manifest_dir)?
+                            .to_path_buf(),
+                    );
+                } else {
+                    Err(InstallerError::MultipleDataDirectories(name.to_string()))?;
+                }
+            }
+        }
+    }
+
+    if data_path.is_none() {
+        log::debug!("Setting Data dir to default.");
     }
 
     let data_path = Utf8PathBuf::try_from(data_path.unwrap_or_default())?;
