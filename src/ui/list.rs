@@ -194,6 +194,9 @@ impl<'a> ModListBuilder<'a> {
             if self.with_priority {
                 row.push(Cell::new(m.priority().to_string()).fg(color));
             }
+            if self.with_status {
+                row.push(Cell::new(m.mod_state().to_string()).fg(color));
+            }
             if self.with_version {
                 row.push(Cell::new(m.version().unwrap_or("<Unknown>").to_string()).fg(color));
             }
