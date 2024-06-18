@@ -54,6 +54,7 @@ impl DownloadCmd {
             Self::Extract { name } => {
                 let name = FindSelectBuilder::new(
                     ArchiveListBuilder::new(settings.download_dir(), settings.cache_dir())
+                        .with_index()
                         .with_status()
                         .with_colour(),
                 )
@@ -62,12 +63,9 @@ impl DownloadCmd {
                 .build()?
                 .prompt()?;
 
-                // TODO: simplify this
-                find_and_extract_archive(
-                    settings.download_dir(),
-                    settings.cache_dir(),
-                    name.as_str(),
-                )?;
+                let idx = name.split_whitespace().skip(1).next().unwrap();
+
+                find_and_extract_archive(settings.download_dir(), settings.cache_dir(), idx)?;
 
                 list_mods(settings)
             }
@@ -289,7 +287,7 @@ pub fn find_and_extract_archive(
             Ok(None)
         }
     } else {
-        log::trace!("Archive {name} not found");
+        log::trace!("Archive \'{name}\' not found");
         Err(DownloadError::ArchiveNotFound(name.to_owned()).into())
     }
 }
