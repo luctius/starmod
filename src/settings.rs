@@ -9,6 +9,7 @@ use std::{
     fs::File,
     io::{BufReader, Read, Write},
 };
+use steamlocate::SteamDir;
 use xdg::BaseDirectories;
 
 use camino::{Utf8Path, Utf8PathBuf};
@@ -138,12 +139,34 @@ impl Settings {
 
         let loot = LootType::FlatPack;
         let proton_dir = None;
-        let compat_dir = None;
         let xedit_dir = None;
-        let steam_dir = dirs::home_dir().map(|mut d| {
-            d.push(".steam/steam");
-            d
-        });
+        let game_dir = SteamDir::locate()
+            .and_then(|mut sd| {
+                sd.app(&game.steam_id())
+                    .map(|sa| Utf8PathBuf::try_from(sa.path.clone()).unwrap_or_default())
+            })
+            .unwrap_or_default();
+        let compat_dir = game_dir
+            .parent()
+            .map(|p| {
+                p.parent().map(|p| {
+                    Utf8PathBuf::try_from(
+                        p.with_file_name("compatdata")
+                            .with_file_name(game.steam_id().to_string()),
+                    )
+                    .unwrap_or_default()
+                })
+            })
+            .flatten();
+
+        let steam_dir = SteamDir::locate()
+            .map(|steam_dir| steam_dir.path)
+            .or_else(|| {
+                dirs::home_dir().map(|mut d| {
+                    d.push(".steam/steam");
+                    d
+                })
+            });
 
         let steam_dir = steam_dir
             .and_then(|steam_dir| {
@@ -153,7 +176,7 @@ impl Settings {
                     None
                 }
             })
-            .map(|sd| Utf8PathBuf::try_from(sd).unwrap());
+            .map(|sd| Utf8PathBuf::try_from(sd).unwrap_or_default());
 
         let default_run = None;
 
@@ -170,7 +193,7 @@ impl Settings {
             log_path,
             download_dir,
             cache_dir,
-            game_dir: Utf8PathBuf::from(""),
+            game_dir,
             editor,
             proton_dir,
             compat_dir,
@@ -267,7 +290,13 @@ impl Settings {
 
         let cache_dir = cache_dir.unwrap_or(settings.cache_dir);
         let download_dir = download_dir.unwrap_or(settings.download_dir);
-        let game_dir = game_dir.unwrap_or(settings.game_dir);
+
+        // We take steams listing as true if we can use it, since the game can easily be changed between config updates.
+        // If we can't find it via steam, we use the configured value
+        let game_dir = SteamDir::locate()
+            .and_then(|mut sd| sd.app(&self.game.steam_id()).map(|sa| sa.path.clone()))
+            .map(|p| Utf8PathBuf::try_from(p).unwrap_or_default())
+            .unwrap_or(game_dir.unwrap_or(settings.game_dir));
 
         let game_dir = if game_dir.exists() {
             game_dir

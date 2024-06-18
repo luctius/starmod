@@ -33,7 +33,7 @@ impl Game {
             Self::Starfield => GameId::Starfield,
         }
     }
-    pub const fn steam_id(self) -> usize {
+    pub const fn steam_id(self) -> u32 {
         match self {
             #[allow(clippy::unreadable_literal)]
             Self::Starfield => 1716740,
