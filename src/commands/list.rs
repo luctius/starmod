@@ -17,7 +17,7 @@ pub enum ListCmd {
     /// Show all mods
     #[default]
     #[clap(visible_alias = "m")]
-    ModList,
+    Mods,
     /// Show all conflicting files in the current active mod-list
     #[clap(visible_alias = "c")]
     Conflicts,
@@ -33,7 +33,7 @@ pub enum ListCmd {
 impl ListCmd {
     pub fn execute(self, settings: &Settings) -> Result<()> {
         match self {
-            Self::ModList => list_mods(settings),
+            Self::Mods => list_mods(settings),
             Self::Conflicts => list_conflicts(settings.cache_dir()),
             Self::Files => list_files(settings.cache_dir()),
             Self::DisabledFiles => list_disabled_files(settings.cache_dir()),
