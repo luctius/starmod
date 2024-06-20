@@ -170,7 +170,7 @@ impl ModCmd {
                     .prompt()?;
 
                 let file_name = FindSelectBuilder::new(
-                    FileListBuilder::new(&mod_list, idx)
+                    FileListBuilder::new(&mod_list[idx])
                         .with_origin()
                         .with_colour(),
                 )
@@ -198,7 +198,7 @@ impl ModCmd {
                     .prompt()?;
 
                 let file_name = FindSelectBuilder::new(
-                    FileListBuilder::new(&mod_list, idx)
+                    FileListBuilder::new(&mod_list[idx])
                         .disabled_files()
                         .with_origin()
                         .with_colour(),
@@ -411,7 +411,8 @@ impl ModCmd {
                         .prompt()?;
 
                 let file_name = FindSelectBuilder::new(
-                    FileListBuilder::new(&mod_list, source_idx)
+                    FileListBuilder::new(&mod_list[source_idx])
+                        .with_index()
                         .with_origin()
                         .with_colour(),
                 )
@@ -420,38 +421,37 @@ impl ModCmd {
                 .build()?
                 .prompt()?;
 
-                //TODO check that custom_mod is indeed a custom mod
-
-                if let Some(file) = mod_list[source_idx]
-                    .origin_files()?
-                    .iter()
-                    .find(|f| f.file_name().unwrap().eq(&file_name))
-                {
-                    let origin = settings.cache_dir().join(file);
-                    let destination = settings
-                        .cache_dir()
-                        .join(mod_list[dest_idx].manifest_dir())
-                        .join(
-                            file.strip_prefix(mod_list[source_idx].manifest_dir())
-                                .unwrap(),
-                        );
-
-                    DirBuilder::new()
-                        .recursive(true)
-                        .create(destination.parent().unwrap())?;
-                    copy(origin, destination)?;
-                    Ok(())
-                } else {
-                    // log::trace!(
-                    //     "File '{}' could not be found in mod '{}'.",
-                    //     file_name,
-                    //     mod_list[origin_idx].name()
-                    // );
-                    Err(
+                let file_idx = file_name
+                    .clone()
+                    .split_whitespace()
+                    .skip(1)
+                    .next()
+                    .ok_or_else(|| {
+                        ModErrors::FileNotFound(
+                            mod_list[source_idx].name().to_string(),
+                            file_name.clone(),
+                        )
+                    })?
+                    .parse::<usize>()
+                    .map_err(|_| {
                         ModErrors::FileNotFound(mod_list[source_idx].name().to_string(), file_name)
-                            .into(),
-                    )
-                }
+                    })?;
+
+                let file = &mod_list[source_idx].files()?[file_idx];
+                let origin = settings
+                    .cache_dir()
+                    .join(mod_list[source_idx].manifest_dir())
+                    .join(file.source());
+                let destination = settings
+                    .cache_dir()
+                    .join(mod_list[dest_idx].manifest_dir())
+                    .join(file.source());
+
+                DirBuilder::new()
+                    .recursive(true)
+                    .create(destination.parent().unwrap())?;
+                copy(origin, destination)?;
+                Ok(())
             }
         }
     }
