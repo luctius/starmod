@@ -275,12 +275,7 @@ impl<'a> FileListBuilder<'a> {
         self.with_headers = true;
         self
     }
-    pub fn with_colour(mut self) -> Self {
-        self.with_colour = true;
-        self
-    }
     pub fn build(self) -> Result<Vec<String>> {
-        // let conflict_list = conflict_list_by_mod(self.mod_list)?;
         let headers = if self.with_headers {
             let mut headers = Vec::new();
             if self.with_index {
@@ -304,26 +299,7 @@ impl<'a> FileListBuilder<'a> {
         };
 
         for (idx, isf) in files.iter().enumerate() {
-            let color = if self.with_colour {
-                // if file_conflist_list.contains_key(&isf.destination().to_string()) {
-                //     if file_conflist_list
-                //         .get(&isf.destination().to_string())
-                //         .unwrap()
-                //         .last()
-                //         .unwrap()
-                //         == manifest.name()
-                //     {
-                //         Color::Green
-                //     } else {
-                //         Color::Red
-                //     }
-                // } else {
-                Color::White
-                // }
-            } else {
-                Color::Reset
-            };
-
+            let color = Color::White;
             let mut row = vec![];
 
             if self.with_index {
@@ -331,9 +307,8 @@ impl<'a> FileListBuilder<'a> {
             }
             if self.with_origin {
                 row.push(Cell::new(isf.source().to_string()).fg(color));
-            } else {
-                row.push(Cell::new(isf.destination().to_string()).fg(color));
             }
+            row.push(Cell::new(isf.destination().to_string()).fg(color));
 
             table.add_row(row);
         }

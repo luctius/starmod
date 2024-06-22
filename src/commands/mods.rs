@@ -169,15 +169,12 @@ impl ModCmd {
                     .build()?
                     .prompt()?;
 
-                let file_name = FindSelectBuilder::new(
-                    FileListBuilder::new(&mod_list[idx])
-                        .with_origin()
-                        .with_colour(),
-                )
-                .with_msg("Please select a file to disable:")
-                .with_input(file.as_deref())
-                .build()?
-                .prompt()?;
+                let file_name =
+                    FindSelectBuilder::new(FileListBuilder::new(&mod_list[idx]).with_origin())
+                        .with_msg("Please select a file to disable:")
+                        .with_input(file.as_deref())
+                        .build()?
+                        .prompt()?;
 
                 if mod_list[idx].disable_file(&file_name) {
                     if mod_list[idx].is_enabled() {
@@ -200,8 +197,7 @@ impl ModCmd {
                 let file_name = FindSelectBuilder::new(
                     FileListBuilder::new(&mod_list[idx])
                         .disabled_files()
-                        .with_origin()
-                        .with_colour(),
+                        .with_origin(),
                 )
                 .with_msg("Please select a file to enable:")
                 .with_input(file.as_deref())
@@ -413,8 +409,7 @@ impl ModCmd {
                 let file_name = FindSelectBuilder::new(
                     FileListBuilder::new(&mod_list[source_idx])
                         .with_index()
-                        .with_origin()
-                        .with_colour(),
+                        .with_origin(),
                 )
                 .with_msg("Please select a file to copy:")
                 .with_input(file.as_deref())

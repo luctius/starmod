@@ -30,7 +30,9 @@ impl CustomManifest {
             let entry = entry?;
             let entry_path = Utf8PathBuf::try_from(entry.path().strip_prefix(&dir)?.to_path_buf())?;
 
-            files.push(entry_path.into());
+            if entry_path.is_file() {
+                files.push(entry_path.into());
+            }
             // dbg!(entry_path);
         }
 
