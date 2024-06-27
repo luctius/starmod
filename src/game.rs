@@ -59,6 +59,11 @@ impl Game {
             Self::Starfield => "sf1edit.exe",
         }
     }
+    pub const fn xedit32_name(self) -> &'static str {
+        match self {
+            Self::Starfield => "sf1edit32.exe",
+        }
+    }
     pub const fn ini_files(self) -> &'static [&'static str] {
         match self {
             Self::Starfield => &["Starfield.ini", "StarfieldPrefs.ini", "StarfieldCustom.ini"],

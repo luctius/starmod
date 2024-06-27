@@ -53,11 +53,15 @@ pub enum RunCmd {
     /// Run the game's xedit
     #[clap(id = "xedit")]
     XEdit,
+
+    #[clap(id = "xedit32")]
+    XEdit32,
 }
 impl RunCmd {
     pub fn execute(self, settings: &Settings) -> Result<()> {
         match self {
-            Self::Game | Self::Loader | Self::XEdit => self.run_executable(settings),
+            Self::XEdit | Self::XEdit32 => Self::run_xedit(settings),
+            Self::Game | Self::Loader => self.run_executable(settings),
             Self::Loot => match settings.loot() {
                 LootType::Windows(_) => self.run_executable(settings),
                 LootType::FlatPack => Self::run_flatpack_loot(settings),
@@ -92,6 +96,9 @@ impl RunCmd {
                         Self::XEdit => settings
                             .xedit_dir()
                             .map(|xedit_dir| xedit_dir.join(settings.game().xedit_name())),
+                        Self::XEdit32 => settings
+                            .xedit_dir()
+                            .map(|xedit_dir| xedit_dir.join(settings.game().xedit32_name())),
                     };
 
                     if let Some(executable) = executable {
@@ -152,6 +159,10 @@ impl RunCmd {
             //FIXME: output.status.exit_ok()
         }
         Ok(())
+    }
+    fn run_xedit(settings: &Settings) -> Result<()> {
+        // RunCmd::XEdit32.run_executable(settings)?;
+        RunCmd::XEdit.run_executable(settings)
     }
 }
 

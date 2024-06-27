@@ -354,6 +354,8 @@ impl<'a> TryFrom<&'a Utf8Path> for Manifest {
     type Error = Error;
 
     fn try_from(file_path: &Utf8Path) -> std::result::Result<Self, Self::Error> {
+        log::trace!("Opening manifest: {}", file_path);
+
         let file = File::open(file_path)?;
         let mut buf_reader = BufReader::new(file);
         let mut contents = String::new();
@@ -362,7 +364,7 @@ impl<'a> TryFrom<&'a Utf8Path> for Manifest {
         let mut manifest: Self = ron::from_str(&contents)?;
         manifest.cache_dir = file_path.parent().unwrap().to_path_buf();
 
-        log::trace!("Opening manifest: {}", manifest.name());
+        log::trace!("Finished opening manifest: {}", manifest.name());
         Ok(manifest)
     }
 }

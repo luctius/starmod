@@ -24,6 +24,7 @@ impl Conflicts {
 }
 
 pub fn conflict_list_by_file(mods: &[Manifest]) -> Result<HashMap<String, Vec<String>>> {
+    log::trace!("Building Conflict List by File");
     let mut all_files = HashMap::new();
 
     // populate with all files
@@ -49,10 +50,13 @@ pub fn conflict_list_by_file(mods: &[Manifest]) -> Result<HashMap<String, Vec<St
     // Remove all files without conflicts
     all_files.retain(|_k, v| v.len() > 1);
 
+    log::trace!("Finished Building Conflict List by File");
     Ok(all_files)
 }
 
 pub fn conflict_list_by_mod(mods: &[Manifest]) -> Result<HashMap<String, Conflicts>> {
+    log::trace!("Building Conflict List");
+
     let list = conflict_list_by_file(mods)?;
 
     let mut mods_conflicts = HashMap::new();
@@ -90,5 +94,6 @@ pub fn conflict_list_by_mod(mods: &[Manifest]) -> Result<HashMap<String, Conflic
         }
     }
 
+    log::trace!("Finished Building Conflict List");
     Ok(mods_conflicts)
 }

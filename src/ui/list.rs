@@ -96,6 +96,8 @@ impl<'a> ModListBuilder<'a> {
         self.list
     }
     pub fn build(self) -> Result<Vec<String>> {
+        log::trace!("Building Mod List");
+
         let conflict_list = conflict_list_by_mod(self.list)?;
         let file_conflist_list = conflict_list_by_file(self.list)?;
 
@@ -231,6 +233,7 @@ impl<'a> ModListBuilder<'a> {
 
         let skip = if self.with_headers { 0 } else { 1 };
 
+        log::trace!("Finished Building Mod List");
         Ok(table.lines().skip(skip).collect::<Vec<_>>())
     }
 }

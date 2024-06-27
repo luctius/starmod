@@ -147,11 +147,23 @@ impl ModCmd {
             Self::Disable { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
 
-                let idx = FindSelectBuilder::new(mod_list.default_list_builder())
-                    .with_msg("Please select a mod to disable:")
-                    .with_input(name.as_deref())
-                    .build()?
-                    .prompt()?;
+                let idx = FindSelectBuilder::new(
+                    mod_list
+                        .iter()
+                        .filter_map(|m| {
+                            if m.is_enabled() {
+                                Some(m.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .default_list_builder(),
+                )
+                .with_msg("Please select a mod to disable:")
+                .with_input(name.as_deref())
+                .build()?
+                .prompt()?;
 
                 mod_list.disable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                 list_mods(settings)
@@ -216,11 +228,23 @@ impl ModCmd {
             }
             Self::Enable { name } => {
                 let mut mod_list = Vec::gather_mods(settings.cache_dir())?;
-                let idx = FindSelectBuilder::new(mod_list.default_list_builder())
-                    .with_msg("Please select a mod to enable:")
-                    .with_input(name.as_deref())
-                    .build()?
-                    .prompt()?;
+                let idx = FindSelectBuilder::new(
+                    mod_list
+                        .iter()
+                        .filter_map(|m| {
+                            if m.is_disabled() {
+                                Some(m.clone())
+                            } else {
+                                None
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .default_list_builder(),
+                )
+                .with_msg("Please select a mod to enable:")
+                .with_input(name.as_deref())
+                .build()?
+                .prompt()?;
                 mod_list.enable_mod(settings.cache_dir(), settings.game_dir(), idx)?;
                 list_mods(settings)
             }

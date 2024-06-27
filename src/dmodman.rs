@@ -23,6 +23,7 @@ pub struct DmodMan {
 }
 impl DmodMan {
     pub fn gather_list(cache_dir: &Utf8Path) -> Result<Vec<Self>> {
+        log::trace!("Gathering Dmodman List");
         let mut dmodman_list = Vec::new();
         let walker = WalkDir::new(cache_dir)
             .min_depth(1)
@@ -36,10 +37,12 @@ impl DmodMan {
             let entry_path = Utf8PathBuf::try_from(entry.path().to_path_buf())?;
 
             if entry_path.extension().unwrap_or_default() == "json" {
+                log::trace!("Dmodman: opening: {}", entry_path);
                 dmodman_list.push(Self::try_from(entry_path.as_path())?);
             }
         }
 
+        log::trace!("Finished gathering Dmodman List");
         Ok(dmodman_list)
     }
     pub fn file_name(&self) -> &str {

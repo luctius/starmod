@@ -125,6 +125,7 @@ pub trait GatherModList {
 
 impl GatherModList for Vec<Manifest> {
     fn gather_mods(cache_dir: &Utf8Path) -> Result<Vec<Manifest>> {
+        log::trace!("Gathering Mods");
         let paths = fs::read_dir(cache_dir)?;
 
         let mut mod_list = Self::new();
@@ -146,6 +147,7 @@ impl GatherModList for Vec<Manifest> {
 
         mod_list.sort_by(Ord::cmp);
 
+        log::trace!("Finished Gathering Mods");
         Ok(mod_list)
     }
 }
